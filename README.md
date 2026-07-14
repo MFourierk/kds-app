@@ -1883,5 +1883,18 @@ main`), bundle et service worker servis vérifiés directement par
 `curl` (présence de "Service", absence de "Cuisine (PIN)",
 `skipWaiting`/`clientsClaim` bien dans le `sw.js` généré).
 
+### Phase 5septies — Retours mobile + écran "Prendre commande" (§5.1/§5.6)
+
+Trois corrections/ajouts après un test en conditions réelles sur un vrai téléphone (pas juste le viewport simulé de Playwright) :
+
+**Bug réel trouvé sur mobile** : le badge "Facture uniquement — encaissement réservé aux managers" (`CaisseScreen.jsx`, vue serveur) utilisait `rounded-full` — correct pour un texte court en pilule, mais ce badge est volontairement long. Sur un écran étroit, le texte enroulé sur plusieurs lignes à l'intérieur d'un `rounded-full` donne un **cercle qui écrase le titre** plutôt qu'un rectangle arrondi lisible (`border-radius: 9999px` sur un élément haut et multi-lignes forme un blob, pas un badge). Corrigé (`rounded-lg`) et disposition revue sur les trois écrans concernés (Caisse/Service/Cuisine) : titre seul sur sa ligne, tous les boutons/badges regroupés sur une ligne séparée en dessous — demandé explicitement pour éviter tout risque de recouvrement, quelle que soit la largeur du contenu du badge.
+
+**Nouvel écran "📝 Prendre commande"** (`PrendreCommandeScreen.jsx`) — réponse directe à une question de résilience réseau : les clients scannent le QR avec leur **propre** connexion mobile (pas le WiFi du restaurant), donc même avec un serveur hébergé localement chez le client (cf. discussion architecture), une coupure internet du restaurant empêche un client d'atteindre l'app pour passer commande — alors que le personnel, connecté au WiFi local, continue d'atteindre le serveur normalement. Cet écran permet au personnel de prendre la commande à la place du client dans ce cas (et en usage courant aussi, simplement).
+
+- **Backend** : nouvelle action `POST /api/orders/prendre-commande/` (`OrderViewSet`, action de liste puisqu'elle crée une nouvelle commande) — réutilise **telle quelle** `services.route_items_to_tickets`, la même fonction de routage que le flux QR client et `add-items` (aucune logique dupliquée). Différence avec le flux QR : authentifié, `Order.serveur = request.user` posé automatiquement (le flux QR anonyme ne le renseigne jamais), table imposée directement (pas de token QR à résoudre). Nouveaux serializers `StaffOrderItemLineSerializer` (étend `AddOrderItemLineSerializer`, ajoute `service_immediat` — absent de l'original car pensé pour un ajout POS simple) et `StaffOrderCreateSerializer` (`TenantScopedFieldsMixin`, donc la table proposée est déjà filtrée au tenant sans vérification manuelle).
+- **Frontend** : sélection de table (grille avec statut Libre/Occupée) → menu groupé par catégorie (même source que l'écran Menu admin, `/api/menu-items/`+`/api/menu-categories/`) → panier persistant en bas d'écran (quantité +/-, bascule "Dès que prêt / Avec le reste" par ligne comme le client QR) → envoi. Accessible à `serveur`/`manager`/`admin` (`ROLES_PRENDRE_COMMANDE` dans `App.jsx`) — contrairement à "Service", pas réservé aux seuls serveurs : n'importe quel membre du staff peut avoir besoin de prendre une commande.
+
+Testé de bout en bout en local : commande prise pour une table via ce nouvel écran → vérifié en base que `Order.serveur` pointe le bon compte, `source='salle'`, et que les tickets sont correctement répartis par poste (un ticket Plats, un ticket Boissons pour une commande mixte) — routage identique à ce que produirait le même panier via le flux QR client. Déployé, bundle vérifié par `curl`.
+
 Se référer au document *Cahier des charges — Application KDS* (sections 4 à 7)
 pour le détail fonctionnel de chaque module.
