@@ -83,9 +83,9 @@ export default function ServeurScreen({ onChangerEcran, onDeconnexion }) {
 
   return (
     <div className="min-h-full bg-slate-900 p-4">
-      <header className="mb-4 flex items-center justify-between">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold text-slate-100">Service</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${connexion.couleur}`}>
             {connexion.texte}
           </span>

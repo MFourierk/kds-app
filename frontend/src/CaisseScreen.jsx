@@ -125,10 +125,10 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
       : 0
 
   return (
-    <div className="min-h-full bg-slate-900 p-6">
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-100">KDS — Caisse</h1>
-        <div className="flex items-center gap-4">
+    <div className="min-h-full bg-slate-900 p-4 sm:p-6">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-100 sm:text-3xl">KDS — Caisse</h1>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           {!peutEncaisser && (
             <span className="rounded-full bg-slate-700 px-4 py-1.5 text-sm font-semibold text-slate-300">
               Facture uniquement — encaissement réservé aux managers
@@ -172,7 +172,7 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
       ) : (
         <div className="flex flex-wrap gap-4">
           {commandes.map((commande) => (
-            <div key={commande.id} className="flex w-80 flex-col rounded-xl border-4 border-slate-600 bg-slate-800 p-4 shadow-lg">
+            <div key={commande.id} className="flex w-full flex-col rounded-xl border-4 border-slate-600 bg-slate-800 p-4 shadow-lg sm:w-80">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xl font-bold text-slate-100">Table {commande.table_numero ?? '—'}</span>
                 {commande.serveur_nom && <span className="text-sm text-slate-400">{commande.serveur_nom}</span>}
