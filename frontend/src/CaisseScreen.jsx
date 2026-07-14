@@ -126,11 +126,11 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
 
   return (
     <div className="min-h-full bg-slate-900 p-4 sm:p-6">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-100 sm:text-3xl">KDS — Caisse</h1>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+      <header className="mb-6">
+        <h1 className="mb-3 text-2xl font-bold text-slate-100 sm:text-3xl">KDS — Caisse</h1>
+        <div className="flex flex-wrap items-center gap-2">
           {!peutEncaisser && (
-            <span className="rounded-full bg-slate-700 px-4 py-1.5 text-sm font-semibold text-slate-300">
+            <span className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300">
               Facture uniquement — encaissement réservé aux managers
             </span>
           )}

@@ -86,8 +86,8 @@ export default function KitchenScreen({ scopeId, titre, onChangerEcran, onDeconn
 
   return (
     <div className="min-h-full bg-slate-900 p-6">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-100 sm:text-3xl">KDS — {titre}</h1>
+      <header className="mb-6">
+        <h1 className="mb-3 text-2xl font-bold text-slate-100 sm:text-3xl">KDS — {titre}</h1>
         <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           <span className={`rounded-full px-4 py-1.5 text-sm font-semibold text-white ${connexion.couleur}`}>
             {connexion.texte}
