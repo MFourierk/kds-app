@@ -18,6 +18,19 @@ export default defineConfig({
     // périmées sans qu'on contrôle quand.
     VitePWA({
       registerType: 'autoUpdate',
+      // Sans ça, un service worker déjà installé chez un utilisateur
+      // continue de servir l'ancien app shell en cache tant que tous ses
+      // onglets ne sont pas fermés — un `git push vps` peut donc être
+      // "invisible" pendant un moment malgré un déploiement réussi
+      // (constaté en usage réel : "Cuisine (PIN)" affiché alors que le
+      // bundle servi contenait déjà "Service"). `skipWaiting` +
+      // `clientsClaim` font prendre le contrôle immédiatement par le
+      // nouveau SW dès son activation, sans attendre un rechargement
+      // complet.
+      workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+      },
       devOptions: { enabled: true }, // SW actif aussi en `npm run dev`, pour pouvoir tester le mode hors-ligne sans build de prod
       manifest: {
         name: 'KDS',

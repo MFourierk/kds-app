@@ -5,6 +5,14 @@ import { LIBELLE_MODE_PAIEMENT, construireRecuHTML, ouvrirApercuImpression } fro
 
 const ROLES_ENCAISSEMENT = ['manager', 'admin']
 
+// "Mobile Money" n'est plus une valeur de paiement réelle
+// (`Order.ModePaiement` n'a que wave/orange_money/momo, cf. §6.4) — juste
+// une catégorie d'affichage qui replie les 3 opérateurs derrière un seul
+// bouton, révélés uniquement au clic plutôt que 6 pastilles à plat d'un
+// coup (demandé après coup, plus lisible sur un écran étroit).
+const OPERATEURS_MOBILE_MONEY = ['wave', 'orange_money', 'momo']
+const CATEGORIES_PAIEMENT = { especes: 'Espèces', mobile_money: 'Mobile Money', carte: 'Carte', autre: 'Autre' }
+
 /**
  * Écran caisse (§5.5, demandé après coup avec le reçu de caisse) :
  * liste des commandes non payées, avec deux niveaux d'action distincts
@@ -72,6 +80,17 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
     setEncaissementOuvert(commande.id)
     setModePaiement('especes')
     setMontantRecu(String(commande.total))
+  }
+
+  function choisirCategorie(categorie) {
+    if (categorie === 'mobile_money') {
+      // Révèle la sous-liste d'opérateurs ; garde l'opérateur déjà
+      // choisi s'il y en a un, sinon présélectionne Wave (il faut bien
+      // une valeur valide pour `encaisser`, l'utilisateur peut changer).
+      setModePaiement((actuel) => (OPERATEURS_MOBILE_MONEY.includes(actuel) ? actuel : 'wave'))
+    } else {
+      setModePaiement(categorie)
+    }
   }
 
   async function confirmerEncaissement(commande) {
@@ -178,18 +197,39 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
               {encaissementOuvert === commande.id ? (
                 <div className="space-y-2 rounded-lg bg-slate-900 p-3">
                   <div className="flex flex-wrap gap-1">
-                    {Object.entries(LIBELLE_MODE_PAIEMENT).map(([valeur, label]) => (
-                      <button
-                        key={valeur}
-                        onClick={() => setModePaiement(valeur)}
-                        className={`min-w-[30%] flex-1 rounded-lg py-1.5 text-xs font-semibold ${
-                          modePaiement === valeur ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                    {Object.entries(CATEGORIES_PAIEMENT).map(([categorie, label]) => {
+                      const active =
+                        categorie === 'mobile_money'
+                          ? OPERATEURS_MOBILE_MONEY.includes(modePaiement)
+                          : modePaiement === categorie
+                      return (
+                        <button
+                          key={categorie}
+                          onClick={() => choisirCategorie(categorie)}
+                          className={`min-w-[30%] flex-1 rounded-lg py-1.5 text-xs font-semibold ${
+                            active ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
                   </div>
+                  {OPERATEURS_MOBILE_MONEY.includes(modePaiement) && (
+                    <div className="flex gap-1">
+                      {OPERATEURS_MOBILE_MONEY.map((operateur) => (
+                        <button
+                          key={operateur}
+                          onClick={() => setModePaiement(operateur)}
+                          className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
+                            modePaiement === operateur ? 'bg-emerald-500 text-slate-900' : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {LIBELLE_MODE_PAIEMENT[operateur]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {modePaiement === 'especes' && (
                     <>
                       <label className="block text-xs text-slate-400">

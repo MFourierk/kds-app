@@ -9,7 +9,10 @@ import ServeurScreen from './ServeurScreen'
 
 const ROLES_DASHBOARD = ['manager', 'admin']
 const ROLES_CAISSE = ['serveur', 'manager', 'admin']
-const ROLES_SERVICE = ['serveur', 'manager', 'admin']
+// Service réservé au rôle serveur (demandé après coup) — un manager/admin a
+// déjà Master (voit tout, tous postes confondus) et Caisse, "Service" y
+// serait redondant sur l'écran de sélection.
+const ROLES_SERVICE = ['serveur']
 
 function App() {
   const [connecte, setConnecte] = useState(() => Boolean(getTokens()?.access))

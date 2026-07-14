@@ -1,32 +1,23 @@
-import { useEffect, useState } from 'react'
-import { fetchStations } from './api'
-
 /**
  * Sélecteur affiché quand l'utilisateur n'a pas de poste assigné
- * (`station_assignee`, ex: manager/admin) — laisse choisir Master ou un
- * poste précis. Un cuisinier avec un poste assigné ne voit jamais cet
- * écran, il est routé directement (§6.2 : un écran dédié par poste en
- * cuisine, pas de choix à faire sur place).
+ * (`station_assignee`, ex: manager/admin) — laisse choisir Master. Un
+ * cuisinier avec un poste assigné ne voit jamais cet écran, il est
+ * routé directement (§6.2 : un écran dédié par poste en cuisine, pas de
+ * choix à faire sur place). Les boutons "Poste X" individuels ont été
+ * retirés de ce sélecteur (demandé après coup) — "Écran Master" voit
+ * déjà tous les postes, un doublon inutile pour qui arrive sur cet écran
+ * (manager/admin sans poste assigné).
  *
- * `masquerEcransCuisine` (rôle serveur) retire Master/postes de la liste
- * — un serveur n'a pas à piloter la préparation cuisine, seulement à
- * confirmer le service (`ServeurScreen.jsx`, cf. `afficherService`).
+ * `masquerEcransCuisine` (rôle serveur) retire Master de la liste — un
+ * serveur n'a pas à piloter la préparation cuisine. `afficherService`
+ * n'est passé à `true` QUE pour le rôle serveur côté `App.jsx` (Master +
+ * Caisse couvrent déjà largement plus qu'un manager n'en a besoin,
+ * Service y serait redondant).
  */
 export default function SelectionEcran({ onChoisir, afficherTableauDeBord, afficherCaisse, afficherService, masquerEcransCuisine }) {
-  const [stations, setStations] = useState([])
-  const [erreur, setErreur] = useState('')
-
-  useEffect(() => {
-    fetchStations()
-      .then(setStations)
-      .catch(() => setErreur('Impossible de charger la liste des postes.'))
-  }, [])
-
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 bg-slate-900 p-8">
       <h1 className="mb-4 text-2xl font-semibold text-slate-100">Quel écran ouvrir ?</h1>
-
-      {erreur && <p className="text-red-400">{erreur}</p>}
 
       {afficherTableauDeBord && (
         <button
@@ -56,24 +47,12 @@ export default function SelectionEcran({ onChoisir, afficherTableauDeBord, affic
       )}
 
       {!masquerEcransCuisine && (
-        <>
-          <button
-            onClick={() => onChoisir({ scopeId: 'master', titre: 'Écran Master' })}
-            className="w-72 rounded-xl bg-amber-500 py-4 text-lg font-semibold text-slate-900 hover:bg-amber-400"
-          >
-            Écran Master (tous les postes)
-          </button>
-
-          {stations.map((station) => (
-            <button
-              key={station.id}
-              onClick={() => onChoisir({ scopeId: station.id, titre: `Poste ${station.nom}` })}
-              className="w-72 rounded-xl bg-slate-700 py-4 text-lg font-semibold text-slate-100 hover:bg-slate-600"
-            >
-              Poste {station.nom}
-            </button>
-          ))}
-        </>
+        <button
+          onClick={() => onChoisir({ scopeId: 'master', titre: 'Écran Master' })}
+          className="w-72 rounded-xl bg-amber-500 py-4 text-lg font-semibold text-slate-900 hover:bg-amber-400"
+        >
+          Écran Master (tous les postes)
+        </button>
       )}
     </div>
   )
