@@ -277,25 +277,33 @@ export default function GestionUtilisateurs({ utilisateur }) {
                 <Badge tone={u.is_active ? 'emerald' : 'gray'}>{u.is_active ? 'Actif' : 'Désactivé'}</Badge>
               </td>
               <td className="px-4 py-3 text-right whitespace-nowrap">
-                <BoutonLien
-                  tone="sky"
-                  className="mr-4"
-                  onClick={() => setForm({ ...u, password: '', station_assignee: u.station_assignee || '' })}
-                >
-                  Modifier
-                </BoutonLien>
-                {ROLES_AVEC_PIN.includes(u.role) && (
-                  <BoutonLien tone="amber" className="mr-4" onClick={() => setPinForm({ id: u.id, username: u.username, pin: '' })}>
-                    Réinitialiser PIN
-                  </BoutonLien>
-                )}
-                <BoutonLien tone="gray" className="mr-4" onClick={() => toggleActif(u)}>
-                  {u.is_active ? 'Désactiver' : 'Réactiver'}
-                </BoutonLien>
-                {u.id !== utilisateur?.id && (
-                  <BoutonLien tone="red" onClick={() => supprimerUtilisateur(u)}>
-                    Supprimer
-                  </BoutonLien>
+                {u.is_superuser ? (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    🔒 Compte système — protégé
+                  </span>
+                ) : (
+                  <>
+                    <BoutonLien
+                      tone="sky"
+                      className="mr-4"
+                      onClick={() => setForm({ ...u, password: '', station_assignee: u.station_assignee || '' })}
+                    >
+                      Modifier
+                    </BoutonLien>
+                    {ROLES_AVEC_PIN.includes(u.role) && (
+                      <BoutonLien tone="amber" className="mr-4" onClick={() => setPinForm({ id: u.id, username: u.username, pin: '' })}>
+                        Réinitialiser PIN
+                      </BoutonLien>
+                    )}
+                    <BoutonLien tone="gray" className="mr-4" onClick={() => toggleActif(u)}>
+                      {u.is_active ? 'Désactiver' : 'Réactiver'}
+                    </BoutonLien>
+                    {u.id !== utilisateur?.id && (
+                      <BoutonLien tone="red" onClick={() => supprimerUtilisateur(u)}>
+                        Supprimer
+                      </BoutonLien>
+                    )}
+                  </>
                 )}
               </td>
             </Ligne>

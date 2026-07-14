@@ -177,12 +177,12 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
 
               {encaissementOuvert === commande.id ? (
                 <div className="space-y-2 rounded-lg bg-slate-900 p-3">
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {Object.entries(LIBELLE_MODE_PAIEMENT).map(([valeur, label]) => (
                       <button
                         key={valeur}
                         onClick={() => setModePaiement(valeur)}
-                        className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
+                        className={`min-w-[30%] flex-1 rounded-lg py-1.5 text-xs font-semibold ${
                           modePaiement === valeur ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300'
                         }`}
                       >

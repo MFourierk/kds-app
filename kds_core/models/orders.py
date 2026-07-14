@@ -39,7 +39,9 @@ class Order(TenantScopedModel):
 
     class ModePaiement(models.TextChoices):
         ESPECES = "especes", "Espèces"
-        MOBILE_MONEY = "mobile_money", "Mobile Money"
+        WAVE = "wave", "Wave"
+        ORANGE_MONEY = "orange_money", "Orange Money"
+        MOMO = "momo", "Momo"
         CARTE = "carte", "Carte"
         AUTRE = "autre", "Autre"
 
@@ -201,6 +203,18 @@ class OrderItem(TenantScopedModel):
         max_length=20, choices=StatutLigne.choices, default=StatutLigne.EN_ATTENTE
     )
     motif_annulation = models.CharField(max_length=255, blank=True)
+    servi_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lignes_servies",
+        help_text=(
+            "Qui a confirmé ce plat servi — écran Service dédié ou bouton "
+            "'Marquer servi' cuisine, peu importe le chemin (§5.1, traçabilité "
+            "de service demandée après coup)."
+        ),
+    )
 
     class Meta:
         ordering = ["created_at"]

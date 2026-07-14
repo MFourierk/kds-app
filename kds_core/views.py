@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from . import models, serializers, services
-from .permissions import IsManagerOrAdmin, IsTenantMember
+from .permissions import IsAdmin, IsManagerOrAdmin, IsTenantMember
 
 
 class TenantScopedViewSetMixin:
@@ -212,6 +212,30 @@ class UserViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelVie
     queryset = models.User.objects.all()
     serializer_class = serializers.UserSerializer
 
+    _MESSAGE_COMPTE_PROTEGE = "Ce compte administrateur système ne peut pas être modifié depuis l'application."
+
+    def _est_protege(self, utilisateur):
+        # Le superutilisateur Django (`is_superuser=True`, accès `/admin/`)
+        # est le seul repère fiable pour "LE compte Admin" — plus robuste
+        # qu'un nom d'utilisateur en dur, et couvre aussi un futur second
+        # superutilisateur créé le même sens (aucun compte de ce type ne
+        # doit être modifiable/désactivable/supprimable depuis l'app,
+        # seulement via `/admin/` par quelqu'un qui y a déjà accès).
+        return utilisateur.is_superuser
+
+    def update(self, request, *args, **kwargs):
+        if self._est_protege(self.get_object()):
+            return Response({"detail": self._MESSAGE_COMPTE_PROTEGE}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        # Couvre aussi la désactivation (`PATCH {is_active: false}`,
+        # `GestionUtilisateurs.jsx::toggleActif`) — pas d'action dédiée à
+        # bloquer séparément, c'est une simple mise à jour de champ.
+        if self._est_protege(self.get_object()):
+            return Response({"detail": self._MESSAGE_COMPTE_PROTEGE}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
         # Sans ce garde-fou, un manager/admin pourrait supprimer son propre
         # compte depuis l'écran Équipe et se retrouver déconnecté en plein
@@ -219,9 +243,15 @@ class UserViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelVie
         # `request.user` ne résout plus rien côté serveur). Aucune autre
         # relation ne bloque la suppression (`Order.serveur`/`caissier`,
         # `TicketStatusLog.utilisateur` sont toutes en `SET_NULL`).
-        if self.get_object().id == request.user.id:
+        cible = self.get_object()
+        if cible.id == request.user.id:
             return Response(
                 {"detail": "Vous ne pouvez pas supprimer votre propre compte."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if self._est_protege(cible):
+            return Response(
+                {"detail": "Ce compte administrateur système ne peut pas être supprimé."},
+                status=status.HTTP_403_FORBIDDEN,
             )
         return super().destroy(request, *args, **kwargs)
 
@@ -250,6 +280,8 @@ class UserViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelVie
         """
 
         user = self.get_object()
+        if self._est_protege(user):
+            return Response({"detail": self._MESSAGE_COMPTE_PROTEGE}, status=status.HTTP_403_FORBIDDEN)
         pin = str(request.data.get("pin", "")).strip()
         if not pin.isdigit() or not (4 <= len(pin) <= 6):
             return Response(
@@ -283,6 +315,13 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
         # qui n'appelle même pas cet endpoint.
         if self.action == "encaisser":
             return [IsAuthenticated(), IsTenantMember(), IsManagerOrAdmin()]
+        # Supprimer une commande = supprimer une transaction (§5.5, demandé
+        # après coup) — réservé strictement au rôle admin, pas manager :
+        # une commande porte l'historique des ventes/paiements, sa
+        # suppression doit rester plus rare/engagée qu'un simple geste de
+        # gestion quotidienne.
+        if self.action == "destroy":
+            return [IsAuthenticated(), IsTenantMember(), IsAdmin()]
         return super().get_permissions()
 
     @action(detail=True, methods=["post"])
@@ -500,6 +539,7 @@ class OrderItemViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
                 {"detail": "Ce plat doit être prêt avant d'être marqué servi."}, status=status.HTTP_400_BAD_REQUEST
             )
         item.statut_ligne = models.OrderItem.StatutLigne.SERVI
+        item.servi_par = request.user
         item.save()
         return Response(self.get_serializer(item).data)
 

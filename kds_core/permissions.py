@@ -34,3 +34,20 @@ class IsManagerOrAdmin(BasePermission):
         return bool(
             user and user.is_authenticated and getattr(user, "role", None) in (User.Role.ADMIN, User.Role.MANAGER)
         )
+
+
+class IsAdmin(BasePermission):
+    """
+    Réservé au rôle admin STRICT (pas manager) — utilisé pour des actions
+    volontairement plus restreintes qu'`IsManagerOrAdmin` (ex: suppression
+    d'une commande/transaction). Un tenant peut avoir plusieurs comptes
+    `role=admin` (associé, comptable...) — pas limité au superutilisateur
+    Django unique (`is_superuser`), qui est une notion distincte (cf.
+    `UserViewSet._est_protege`).
+    """
+
+    message = "Réservé aux administrateurs."
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(user and user.is_authenticated and getattr(user, "role", None) == User.Role.ADMIN)

@@ -148,8 +148,14 @@ class RestaurantTableSerializer(TenantScopedSerializer):
 class UserSerializer(TenantScopedSerializer):
     """
     Expose volontairement un sous-ensemble des champs de `User` :
-    - jamais `is_staff` / `is_superuser` / `password` (hash) / `pin_code` (hash)
-      pour ne pas ouvrir d'escalade de privilèges via l'API tenant.
+    - jamais `is_staff` / `password` (hash) / `pin_code` (hash) pour ne pas
+      ouvrir d'escalade de privilèges via l'API tenant.
+    - `is_superuser` exposé en LECTURE seule uniquement (`read_only_fields`)
+      — sert au frontend (`GestionUtilisateurs.jsx`) à griser les actions
+      sur le compte Admin système ; aucun risque d'escalade puisqu'il ne
+      peut jamais être écrit via ce serializer, et `UserViewSet` bloque de
+      toute façon `update`/`partial_update`/`destroy` sur ce compte
+      indépendamment de ce que le client enverrait.
     - `password` est un champ écriture seule, haché via `set_password`.
     """
 
@@ -169,9 +175,10 @@ class UserSerializer(TenantScopedSerializer):
             "role",
             "station_assignee",
             "is_active",
+            "is_superuser",
             "password",
         ]
-        read_only_fields = ["id", "tenant"]
+        read_only_fields = ["id", "tenant", "is_superuser"]
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
@@ -354,6 +361,8 @@ class OrderTicketSerializer(TenantScopedSerializer):
 
 
 class OrderItemSerializer(TenantScopedSerializer):
+    servi_par_nom = serializers.SerializerMethodField()
+
     class Meta:
         model = models.OrderItem
         fields = [
@@ -366,8 +375,15 @@ class OrderItemSerializer(TenantScopedSerializer):
             "commentaire_libre",
             "statut_ligne",
             "motif_annulation",
+            "servi_par",
+            "servi_par_nom",
         ]
-        read_only_fields = ["id", "tenant"]
+        read_only_fields = ["id", "tenant", "servi_par"]
+
+    def get_servi_par_nom(self, obj):
+        if not obj.servi_par:
+            return None
+        return obj.servi_par.get_full_name() or obj.servi_par.username
 
 
 class TicketStatusLogSerializer(TenantScopedSerializer):

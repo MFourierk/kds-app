@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchStats, fetchVentesParJour } from '../api'
 import { formatPrix } from '../client/formatPrix'
+import { LIBELLE_MODE_PAIEMENT } from '../print/imprimer'
 import HorizontalBarChart from './charts/HorizontalBarChart'
 import LineChartHeures from './charts/LineChartHeures'
 import StatTile from './StatTile'
@@ -9,13 +10,6 @@ function dateDuJour() {
   const d = new Date()
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-const LIBELLE_MODE_PAIEMENT = {
-  especes: 'Espèces',
-  mobile_money: 'Mobile Money',
-  carte: 'Carte',
-  autre: 'Autre',
 }
 
 const PRESETS = [

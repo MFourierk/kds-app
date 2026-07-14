@@ -144,6 +144,16 @@ def _sync_lignes_statut(instance):
     ne peut passer "servi" qu'une fois "prêt", donc TOUTES ses lignes
     actives sont déjà "prêt" à ce moment précis, cf.
     `STATUT_TICKET_VERS_LIGNE`).
+
+    Quand la cible est "servi", stampe aussi `servi_par` (traçabilité de
+    service, demandée après coup) avec l'utilisateur de la requête en
+    cours — que ce soit un bump ticket-entier (écran cuisine classique)
+    ou la promotion automatique déclenchée par
+    `_sync_ticket_statut_depuis_lignes` une fois toutes les lignes déjà
+    individuellement servies via l'écran Service. Dans ce dernier cas,
+    l'exclusion `nouveau_statut_ligne` ci-dessous exclut déjà les lignes
+    concernées (déjà "servi", chacune avec son propre `servi_par` posé
+    par `OrderItemViewSet.marquer_servi`) — jamais écrasées ici.
     """
 
     nouveau_statut_ligne = STATUT_TICKET_VERS_LIGNE.get(instance.statut)
@@ -152,7 +162,10 @@ def _sync_lignes_statut(instance):
     exclusions = [nouveau_statut_ligne, OrderItem.StatutLigne.ANNULE]
     if nouveau_statut_ligne == OrderItem.StatutLigne.EN_PREPARATION:
         exclusions.append(OrderItem.StatutLigne.PRET)
-    instance.lignes.exclude(statut_ligne__in=exclusions).update(statut_ligne=nouveau_statut_ligne)
+    champs = {"statut_ligne": nouveau_statut_ligne}
+    if nouveau_statut_ligne == OrderItem.StatutLigne.SERVI:
+        champs["servi_par"] = get_current_user()
+    instance.lignes.exclude(statut_ligne__in=exclusions).update(**champs)
 
 
 @receiver(post_save, sender=OrderItem)

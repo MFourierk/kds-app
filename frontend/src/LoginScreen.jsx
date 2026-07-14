@@ -222,7 +222,7 @@ export default function LoginScreen({ onConnecte }) {
               mode === 'cuisine' ? 'bg-amber-500 text-slate-900' : 'text-slate-400'
             }`}
           >
-            Cuisine (PIN)
+            Service
           </button>
         </div>
 

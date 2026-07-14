@@ -15,7 +15,9 @@ import { formatPrix } from '../client/formatPrix'
 
 export const LIBELLE_MODE_PAIEMENT = {
   especes: 'Espèces',
-  mobile_money: 'Mobile Money',
+  wave: 'Wave',
+  orange_money: 'Orange Money',
+  momo: 'Momo',
   carte: 'Carte',
   autre: 'Autre',
 }
