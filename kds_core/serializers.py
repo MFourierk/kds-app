@@ -429,6 +429,33 @@ class AddOrderItemsSerializer(serializers.Serializer):
     items = AddOrderItemLineSerializer(many=True)
 
 
+class StaffOrderItemLineSerializer(AddOrderItemLineSerializer):
+    """
+    Comme `AddOrderItemLineSerializer`, avec en plus le choix "servir dès
+    que prêt / avec le reste" (§5.1/§5.6) — le client QR peut déjà le
+    choisir plat par plat ; un serveur qui prend la commande à la place
+    du client doit pouvoir lui poser la même question.
+    """
+
+    service_immediat = serializers.BooleanField(default=True)
+
+
+class StaffOrderCreateSerializer(TenantScopedFieldsMixin, serializers.Serializer):
+    """
+    Body de `POST /api/orders/prendre-commande/` — prise de commande par
+    le personnel pour une table (§5.1/§5.6, demandé après coup) : même
+    routage que le flux QR client (`services.route_items_to_tickets`),
+    mais authentifié. Utile en usage courant (le serveur commande à la
+    place du client) et indispensable en cas de coupure internet : le
+    client sur son propre réseau mobile ne peut alors plus atteindre le
+    serveur du restaurant, mais le personnel connecté au WiFi local le
+    peut toujours (cf. discussion produit sur la résilience réseau).
+    """
+
+    table = serializers.PrimaryKeyRelatedField(queryset=models.RestaurantTable.objects.all())
+    items = StaffOrderItemLineSerializer(many=True)
+
+
 class PosIntegrationSerializer(TenantScopedSerializer):
     """
     `secret_hash` n'est jamais exposé. La clé API en clair n'est renvoyée

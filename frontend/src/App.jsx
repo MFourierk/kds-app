@@ -6,6 +6,7 @@ import SelectionEcran from './SelectionEcran'
 import AdminDashboard from './admin/AdminDashboard'
 import CaisseScreen from './CaisseScreen'
 import ServeurScreen from './ServeurScreen'
+import PrendreCommandeScreen from './PrendreCommandeScreen'
 
 const ROLES_DASHBOARD = ['manager', 'admin']
 const ROLES_CAISSE = ['serveur', 'manager', 'admin']
@@ -13,6 +14,11 @@ const ROLES_CAISSE = ['serveur', 'manager', 'admin']
 // déjà Master (voit tout, tous postes confondus) et Caisse, "Service" y
 // serait redondant sur l'écran de sélection.
 const ROLES_SERVICE = ['serveur']
+// Prendre commande : utile en usage courant (serveur commande à la place du
+// client) et indispensable en cas de coupure internet (le client sur son
+// réseau mobile ne peut plus atteindre le serveur du restaurant) — ouvert
+// à tout le staff qui prend des commandes.
+const ROLES_PRENDRE_COMMANDE = ['serveur', 'manager', 'admin']
 
 function App() {
   const [connecte, setConnecte] = useState(() => Boolean(getTokens()?.access))
@@ -65,6 +71,7 @@ function App() {
         afficherTableauDeBord={ROLES_DASHBOARD.includes(role)}
         afficherCaisse={ROLES_CAISSE.includes(role)}
         afficherService={ROLES_SERVICE.includes(role)}
+        afficherPrendreCommande={ROLES_PRENDRE_COMMANDE.includes(role)}
         masquerEcransCuisine={role === 'serveur'}
       />
     )
@@ -97,6 +104,15 @@ function App() {
   if (ecran.scopeId === 'service') {
     return (
       <ServeurScreen
+        onChangerEcran={() => setEcran('selection')}
+        onDeconnexion={() => setConnecte(false)}
+      />
+    )
+  }
+
+  if (ecran.scopeId === 'prendre-commande') {
+    return (
+      <PrendreCommandeScreen
         onChangerEcran={() => setEcran('selection')}
         onDeconnexion={() => setConnecte(false)}
       />

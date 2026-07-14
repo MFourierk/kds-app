@@ -388,6 +388,40 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
             ticket.save()
         return Response({"detail": f"{nb} ticket(s) marqué(s) servi(s).", "nb_servis": nb})
 
+    @action(detail=False, methods=["post"], url_path="prendre-commande")
+    def prendre_commande(self, request):
+        """
+        Prise de commande par le personnel pour une table (§5.1/§5.6,
+        demandé après coup) — même routage que le flux QR client
+        (`services.route_items_to_tickets`), mais authentifié : la
+        commande porte `serveur=request.user`, pas de token QR à
+        résoudre puisque la table est choisie directement. Utile en usage
+        courant (le serveur commande à la place du client) et
+        indispensable en cas de coupure internet — le client sur son
+        propre réseau mobile ne peut alors plus atteindre le serveur du
+        restaurant, mais le personnel sur le WiFi local le peut toujours.
+        """
+
+        serializer = serializers.StaffOrderCreateSerializer(
+            data=request.data, context=self.get_serializer_context()
+        )
+        serializer.is_valid(raise_exception=True)
+        table = serializer.validated_data["table"]
+
+        order = models.Order.objects.create(
+            tenant=request.user.tenant,
+            table=table,
+            serveur=request.user,
+            source=models.Order.Source.SALLE,
+        )
+        services.route_items_to_tickets(order, serializer.validated_data["items"])
+
+        if table.statut == models.RestaurantTable.Statut.LIBRE:
+            table.statut = models.RestaurantTable.Statut.OCCUPEE
+            table.save(update_fields=["statut", "updated_at"])
+
+        return Response(self.get_serializer(order).data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["post"], url_path="add-items")
     def add_items(self, request, pk=None):
         """

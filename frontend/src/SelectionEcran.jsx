@@ -14,7 +14,14 @@
  * Caisse couvrent déjà largement plus qu'un manager n'en a besoin,
  * Service y serait redondant).
  */
-export default function SelectionEcran({ onChoisir, afficherTableauDeBord, afficherCaisse, afficherService, masquerEcransCuisine }) {
+export default function SelectionEcran({
+  onChoisir,
+  afficherTableauDeBord,
+  afficherCaisse,
+  afficherService,
+  afficherPrendreCommande,
+  masquerEcransCuisine,
+}) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 bg-slate-900 p-8">
       <h1 className="mb-4 text-2xl font-semibold text-slate-100">Quel écran ouvrir ?</h1>
@@ -43,6 +50,15 @@ export default function SelectionEcran({ onChoisir, afficherTableauDeBord, affic
           className="w-72 rounded-xl border-2 border-emerald-400 bg-slate-800 py-4 text-lg font-semibold text-emerald-300 hover:bg-slate-700"
         >
           🍽️ Service
+        </button>
+      )}
+
+      {afficherPrendreCommande && (
+        <button
+          onClick={() => onChoisir({ scopeId: 'prendre-commande', titre: 'Prendre commande' })}
+          className="w-72 rounded-xl border-2 border-sky-400 bg-slate-800 py-4 text-lg font-semibold text-sky-300 hover:bg-slate-700"
+        >
+          📝 Prendre commande
         </button>
       )}
 
