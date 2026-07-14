@@ -1752,5 +1752,84 @@ que soit l'état du réseau local. Ce n'est pas le scénario du VPS actuel
 (hébergement distant pour démo), qui reste adapté pour présenter l'app à
 distance mais pas pour une exploitation offline-first en salle.
 
+### Phase 5quinquies — Durcissement compte Admin, traçabilité service, paiements mobiles (§5.4/§5.5/§6.4)
+
+Cinq corrections demandées ensemble après le déploiement VPS, en préparant
+la présentation au collaborateur :
+
+**1. Compte Admin protégé** — `UserViewSet.update`/`partial_update`/
+`destroy`/`set_pin` refusent désormais toute action sur un compte
+`is_superuser=True` (403, quel que soit qui la demande, manager ou même
+un autre admin). Choix volontaire de se baser sur `is_superuser` plutôt
+que sur le nom d'utilisateur "Admin" en dur — plus robuste, couvre aussi
+un futur second superutilisateur créé de la même façon. `is_superuser`
+était jusqu'ici totalement absent de `UserSerializer` ("jamais exposé,
+pour ne pas ouvrir d'escalade de privilèges") ; ajouté en lecture SEULE
+(`read_only_fields`) — le frontend (`GestionUtilisateurs.jsx`) en a besoin
+pour griser la ligne ("🔒 Compte système — protégé"), aucun risque
+d'escalade puisqu'il ne peut jamais être écrit par ce serializer, et les
+overrides de vue bloquent de toute façon l'action indépendamment de ce
+qu'un client enverrait.
+
+**2. Suppression de commande réservée au rôle admin** — nouvelle
+permission `IsAdmin` (`permissions.py`, rôle strictement `admin`, pas
+`manager` — distinct d'`IsManagerOrAdmin` déjà existant), branchée sur
+`OrderViewSet.get_permissions()` pour l'action `destroy` uniquement.
+Volontairement basé sur le **rôle**, pas sur `is_superuser` — un tenant
+peut avoir plusieurs comptes `role=admin` (associé, comptable...), la
+protection du point 1 est une notion différente (LE compte système
+unique) de celle-ci (n'importe quel admin métier).
+
+**3. Traçabilité du service** — nouveau champ `OrderItem.servi_par`
+(FK `User`, `SET_NULL`, migration `0010`). Posé à deux endroits pour
+couvrir les deux chemins qui mènent à "servi" :
+- `OrderItemViewSet.marquer_servi` (écran Service dédié, Phase 5quater)
+  pose directement `item.servi_par = request.user`.
+- `signals.py::_sync_lignes_statut` (cascade ticket → lignes, utilisée
+  par le bump ticket-entier classique de l'écran cuisine) pose
+  `servi_par = get_current_user()` sur les lignes qu'elle fait
+  effectivement passer à "servi" — l'exclusion déjà existante
+  (`exclude(statut_ligne__in=exclusions)`) protège naturellement les
+  lignes déjà servies individuellement (donc déjà attribuées) d'un
+  écrasement lors d'une promotion automatique de ticket.
+- Vérifié : un plat marqué "prêt" par un compte puis "servi" par un
+  **autre** compte enregistre bien le second, pas le premier — la
+  traçabilité suit qui a réellement fait le geste de service, pas la
+  préparation.
+- Exposé en lecture via `servi_par_nom` (`OrderItemSerializer`, même
+  pattern que `serveur_nom`/`caissier_nom`) — pas encore affiché dans
+  une UI de reporting dédiée, mais la donnée est capturée dès maintenant
+  ("pour un suivi", explicitement demandé) plutôt que perdue faute
+  d'avoir été enregistrée au moment du geste.
+
+**4. Bouton de connexion renommé** — "Cuisine (PIN)" → "Service"
+(`LoginScreen.jsx`), purement cosmétique : ce mode de connexion sert
+autant aux serveurs qu'aux cuisiniers (PIN, écran tactile), "Service"
+est un terme plus neutre que "Cuisine" pour les deux profils.
+
+**5. Modes de paiement mobiles précisés** — `Order.ModePaiement` : le
+choix générique `mobile_money` est remplacé par trois choix distincts,
+`wave`/`orange_money`/`momo` (migration `0011`, `Espèces`/`Carte`/
+`Autre` inchangés). Mis à jour partout où les libellés étaient
+dupliqués (`print/imprimer.js::LIBELLE_MODE_PAIEMENT`, seule source
+maintenant — `RapportsTab.jsx` importe la même constante au lieu d'en
+garder une copie séparée, corrigé au passage pour éviter que les deux
+dérivent). Les pastilles de mode de paiement sur l'écran Caisse passent
+de `flex` à `flex flex-wrap` (6 choix au lieu de 4 ne tenaient plus sur
+une seule ligne).
+
+Testé de bout en bout en local avant déploiement (comptes `demo`
+manager et un compte `admin2` temporaire `role=admin` non-superutilisateur,
+pour bien distinguer les deux notions du point 1 vs point 2) :
+tentative de désactivation du compte Admin par un manager → 403 avec le
+bon message ; suppression de commande par un manager → 403, par un
+compte admin (rôle, pas superutilisateur) → 204 ; plat marqué prêt par
+`demo`, servi par un autre compte → `servi_par_nom` correctement
+attribué au second ; pastilles Wave/Orange Money/Momo visibles sur
+l'écran Caisse, "Mobile Money" disparu partout. Déployé sur le VPS
+(`git push vps main`), migrations appliquées automatiquement par le
+hook, vérifié en ligne après coup. Compte de test `admin2` et données
+de test nettoyés après les vérifications.
+
 Se référer au document *Cahier des charges — Application KDS* (sections 4 à 7)
 pour le détail fonctionnel de chaque module.
