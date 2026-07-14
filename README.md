@@ -1640,5 +1640,117 @@ côté à la demande de l'utilisateur — aucune notion équivalente dans les
 données actuelles de l'app (pas de zones/salles, pas de vente à
 emporter), pas de champ inventé pour le remplir artificiellement.
 
+### Phase 5quater — Écran Service dédié serveur (§5.1/§5.6, fait)
+
+Demandé en préparant le déploiement chez un client réel (réseau local,
+serveurs sur téléphone) : jusqu'ici, "Marquer servi" n'existait que comme
+dernier état du bouton bump sur l'écran cuisine complet (Master/Poste) —
+n'importe quel compte du tenant pouvait aussi démarrer/bumper/rush/
+imprimer, pas seulement confirmer le service. Un serveur sur son
+téléphone ne doit avoir accès qu'à UNE action.
+
+**Nouvel écran `ServeurScreen.jsx`** (mobile-first, une colonne, gros
+boutons tactiles) — réutilise `useTicketsSocket('master')` (déjà existant,
+temps réel) plutôt qu'un nouveau canal WebSocket, filtré aux tickets
+`pret`, regroupés par **commande** (`order`, pas `ticket`) — une commande
+peut avoir plusieurs tickets (un par poste, ex: cuisine + bar), donc un
+geste "tout servir" doit couvrir tous les postes de la table à la fois,
+pas juste un ticket.
+
+**Deux nouvelles actions backend**, complémentaires à l'existant :
+- `POST /api/order-items/<id>/marquer-servi/` — confirme UN plat, dès
+  qu'IL est prêt (`statut_ligne == pret`), sans attendre le reste du
+  ticket. Avant cet ajout, "servi" n'existait qu'au niveau du ticket
+  entier (`OrderTicketViewSet.bump`) — la granularité plat-par-plat
+  s'arrêtait à "prêt" (`marquer_pret`, Phase 4), jamais jusqu'à "servi".
+- `POST /api/orders/<id>/marquer-servi/` — "tout servir d'un coup" :
+  bascule tous les tickets **actuellement prêts** de la commande à
+  `servi`, ignore silencieusement ceux pas encore prêts (un serveur doit
+  pouvoir valider ce qui est prêt maintenant et revenir plus tard pour
+  le reste, ex: le bar est prêt, pas encore la cuisine).
+
+**Signal étendu** (`signals.py::_sync_ticket_statut_depuis_lignes`) pour
+symétrie avec la logique déjà existante côté "prêt" : le ticket bascule
+`servi` tout seul dès que toutes ses lignes actives le sont, **en
+repassant par `pret` au passage** si ce n'était pas déjà fait (jamais de
+saut direct `en_preparation` → `servi`) — sinon `heure_pret` ne serait
+jamais horodaté et fausserait les rapports de temps de préparation
+(Phase 6, `stats_views.py`).
+
+**Routage par rôle** (`App.jsx`/`SelectionEcran.jsx`) : un compte
+`serveur` ne voit plus "Écran Master" ni les postes dans le sélecteur —
+seulement "Caisse" et "🍽️ Service" (nouveau prop `masquerEcransCuisine`).
+Restriction **frontend uniquement** — les actions bump/fire/marquer-pret
+restent ouvertes à `IsTenantMember` côté API comme avant (pas de nouvelle
+permission backend), décision volontaire pour rester proportionné à la
+demande plutôt que durcir toute l'API cuisine sans qu'on l'ait demandé.
+
+**Bug trouvé en testant en conditions réelles (VPS de prod)** : le
+premier redéploiement via le nouveau pipeline `git push vps` a cassé
+l'écran client QR ("Connexion indisponible") — le `npm run build` avait
+utilisé `frontend/.env` (dev local, `VITE_API_BASE_URL=http://localhost:8000`)
+au lieu des vraies URLs de prod, invisible sur les écrans staff testés
+juste avant (mais fatal pour l'écran client, qui tourne dans le
+navigateur d'un vrai client, pas le mien). Corrigé en ajoutant
+`frontend/.env.production` (URLs `https://kds.behanian.com`), utilisé
+automatiquement par Vite en mode production — **toujours vérifier après
+un build que les URLs baked-in sont les bonnes** (`grep -o
+"kds.behanian.com" frontend/dist/assets/*.js`) avant de pousser.
+
+Testé de bout en bout sur le VPS de prod (pas en local, Docker Desktop
+indisponible au moment du test) : commande QR (Poulet braisé + Mojito,
+2 postes différents) → démarrée et marquée prête côté Master → connexion
+`serveur1` (PIN) → écran de sélection confirmé limité à Caisse/Service →
+écran Service affiche bien les 2 plats prêts, groupés sous "Table 2" →
+un plat confirmé servi individuellement, puis "Tout servir" pour le
+reste → vérifié en base : ticket et lignes bien passés `servi`, aucune
+autre commande de la table affectée. Données de test nettoyées après
+coup.
+
+### Déploiement VPS (production réelle, §5.5 "résilience réseau")
+
+Déployé chez un client (VPS Ubuntu 24.04 partagé avec une app hôtelière
+existante) pour une démo — cf. `DEPLOY.md` à la racine pour le détail
+complet (infrastructure, flux `git push vps main`, commandes utiles).
+Points clés :
+
+- **Isolation totale** de l'app hôtelière déjà en place sur le même
+  serveur : dossier séparé (`/opt/kds-app`), base PostgreSQL séparée
+  (même cluster, DB/utilisateur dédiés), port séparé (`8001` vs `8000`),
+  fichier Nginx séparé, certificat SSL séparé (`kds.behanian.com`).
+- **Service backend en mode utilisateur systemd** (`systemctl --user`),
+  pas service système — décision prise après avoir découvert que le
+  système de synchronisation existant du client (sync DB + déploiement
+  de son app hôtelière, toutes les 6h) réinitialise périodiquement
+  `/etc/sudoers.d/`, ce qui aurait rendu un `sudo systemctl restart`
+  dans le hook de déploiement silencieusement peu fiable. Un service
+  utilisateur (avec `loginctl enable-linger`) ne dépend d'aucun accès
+  sudo, jamais — insensible à ce mécanisme externe qu'il n'était de
+  toute façon pas question de modifier.
+- **Déploiement en un `git push`** : dépôt bare sur le VPS
+  (`~/kds-deploy.git`) avec hook `post-receive` (checkout, `pip
+  install`, migrations, `collectstatic`, redémarrage du service) — GitHub
+  (`MFourierk/kds-app`) sert en parallèle pour l'historique/la
+  collaboration, pas pour le déploiement lui-même.
+- **Frontend construit en local**, jamais sur le VPS (pas de Node.js
+  installé sur le serveur de prod, volontairement, pour ne pas alourdir
+  une machine qui héberge déjà une autre app) — `frontend/dist/` est donc
+  exceptionnellement **versionné** dans Git (contrairement à la
+  convention habituelle), avec le piège ci-dessus (Phase 5quater) sur les
+  variables d'environnement à surveiller à chaque build.
+- **`kds.behanian.com` est temporaire** — sous-domaine d'un client
+  emprunté uniquement pour cette démo, à retirer proprement une fois la
+  présentation faite (cf. avertissement dans `DEPLOY.md`).
+
+**Piste explicitement ouverte, pas encore construite** : pour une
+installation chez un client final avec exigence de continuité de service
+même sans internet (réseau WiFi local uniquement), le backend devra
+tourner **sur place** (ex: la machine Master elle-même, via
+`docker-compose.yml` déjà présent dans le projet), pas sur un VPS
+distant — une coupure internet rend un backend cloud injoignable quel
+que soit l'état du réseau local. Ce n'est pas le scénario du VPS actuel
+(hébergement distant pour démo), qui reste adapté pour présenter l'app à
+distance mais pas pour une exploitation offline-first en salle.
+
 Se référer au document *Cahier des charges — Application KDS* (sections 4 à 7)
 pour le détail fonctionnel de chaque module.
