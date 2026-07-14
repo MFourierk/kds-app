@@ -24,6 +24,13 @@ class KioskStaffListView(generics.ListAPIView):
     modèle de confiance que le menu QR code client (accès public mais
     scopé à un seul tenant connu via son slug, aucune donnée sensible
     exposée : pas d'email, pas de PIN, pas de tenant_id).
+
+    `role=manager`/`admin` volontairement exclus (retiré après coup,
+    trouvé en usage réel : un compte manager sans même de PIN configuré
+    apparaissait dans cette liste) — un manager/admin se connecte par
+    identifiant + mot de passe (onglet "Manager"), jamais par PIN ; ce
+    kiosque ne doit lister que les rôles qui utilisent réellement ce mode
+    de connexion (§6.4).
     """
 
     serializer_class = KioskStaffSerializer
@@ -38,7 +45,6 @@ class KioskStaffListView(generics.ListAPIView):
             tenant__slug=tenant_slug,
             is_active=True,
             role__in=[
-                models.User.Role.MANAGER,
                 models.User.Role.CUISINIER,
                 models.User.Role.SERVEUR,
             ],
