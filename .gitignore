@@ -1,0 +1,27 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+db.sqlite3
+
+# Secrets / environnement local
+.env
+
+# Généré côté serveur — jamais versionné, régénéré à chaque déploiement
+/staticfiles/
+/media/
+
+# Frontend
+frontend/node_modules/
+# frontend/dist/ est volontairement VERSIONNÉ (pas de Node.js sur le VPS de
+# prod — le build est fait en local avant chaque commit/push, cf. DEPLOY.md).
+
+# Outils locaux (agent, IDE) — jamais pertinents côté serveur
+.claude/
+.test-driver/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

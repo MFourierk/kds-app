@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/*
+ * Deux apps distinctes partagent ce projet (écrans KDS sombres vs
+ * interface client claire, cf. main.jsx) — chaque écran fixe donc son
+ * propre fond/texte via des classes Tailwind sur son conteneur racine
+ * (déjà le cas partout). Les styles ci-dessous doivent rester dans
+ * `@layer base` : Tailwind v4 range ses utilitaires dans des @layer, et
+ * une règle hors-layer bat TOUJOURS une règle dans un layer quelle que
+ * soit la spécificité — un `body { color: ... }` non-layé écraserait
+ * silencieusement tous les `text-*`/`bg-*` de chaque écran.
+ */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+}
