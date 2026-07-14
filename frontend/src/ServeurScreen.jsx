@@ -85,30 +85,29 @@ export default function ServeurScreen({ onChangerEcran, onDeconnexion }) {
     <div className="min-h-full bg-slate-900 p-4">
       <header className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-100">Service</h1>
-        <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${connexion.couleur}`}>
-          {connexion.texte}
-        </span>
-      </header>
-
-      <div className="mb-4 flex gap-2">
-        {onChangerEcran && (
+        <div className="flex items-center gap-2">
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${connexion.couleur}`}>
+            {connexion.texte}
+          </span>
+          {onChangerEcran && (
+            <button
+              onClick={onChangerEcran}
+              className="rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600"
+            >
+              Changer d'écran
+            </button>
+          )}
           <button
-            onClick={onChangerEcran}
-            className="flex-1 rounded-lg bg-slate-700 px-3 py-2.5 text-sm text-slate-200 hover:bg-slate-600"
+            onClick={() => {
+              logout()
+              onDeconnexion()
+            }}
+            className="rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600"
           >
-            Changer d'écran
+            Déconnexion
           </button>
-        )}
-        <button
-          onClick={() => {
-            logout()
-            onDeconnexion()
-          }}
-          className="flex-1 rounded-lg bg-slate-700 px-3 py-2.5 text-sm text-slate-200 hover:bg-slate-600"
-        >
-          Déconnexion
-        </button>
-      </div>
+        </div>
+      </header>
 
       {erreur && (
         <div className="mb-4 rounded-xl bg-red-600 p-3 text-center text-sm font-semibold text-white shadow-lg">
