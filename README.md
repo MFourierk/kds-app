@@ -1814,9 +1814,8 @@ choix générique `mobile_money` est remplacé par trois choix distincts,
 dupliqués (`print/imprimer.js::LIBELLE_MODE_PAIEMENT`, seule source
 maintenant — `RapportsTab.jsx` importe la même constante au lieu d'en
 garder une copie séparée, corrigé au passage pour éviter que les deux
-dérivent). Les pastilles de mode de paiement sur l'écran Caisse passent
-de `flex` à `flex flex-wrap` (6 choix au lieu de 4 ne tenaient plus sur
-une seule ligne).
+dérivent). *(Affichage des pastilles revu une nouvelle fois juste après
+— cf. section suivante, "Mobile Money" replié derrière une catégorie.)*
 
 Testé de bout en bout en local avant déploiement (comptes `demo`
 manager et un compte `admin2` temporaire `role=admin` non-superutilisateur,
@@ -1830,6 +1829,59 @@ l'écran Caisse, "Mobile Money" disparu partout. Déployé sur le VPS
 (`git push vps main`), migrations appliquées automatiquement par le
 hook, vérifié en ligne après coup. Compte de test `admin2` et données
 de test nettoyés après les vérifications.
+
+### Phase 5sexies — Retours après démo : cache PWA, écran de sélection simplifié, Mobile Money replié
+
+Cinq retours groupés après un premier tour d'usage réel sur le VPS,
+certains révélant un vrai bug plutôt qu'une simple préférence :
+
+**1. Bug de cache PWA — pas un problème de déploiement.** Le
+collaborateur voyait encore "Cuisine (PIN)" après le déploiement du
+renommage en "Service" (Phase 5quinquies). Vérifié directement : le
+bundle JS servi par le VPS contenait déjà "Service" et plus "Cuisine
+(PIN)" — le déploiement était correct, c'est le **service worker déjà
+installé côté navigateur** qui continuait de servir l'ancien app shell
+en cache (`registerType: 'autoUpdate'` seul ne force pas l'activation
+immédiate du nouveau SW — l'ancien reste aux commandes tant que tous les
+onglets ne sont pas fermés). Corrigé dans `vite.config.js` :
+`workbox: { skipWaiting: true, clientsClaim: true }`, qui fait prendre
+le contrôle par le nouveau SW dès son installation. Un utilisateur déjà
+sur un SW antérieur à ce correctif doit encore recharger une fois "en
+dur" (Ctrl+Maj+R) pour en sortir ; tous les déploiements suivants
+s'appliqueront sans ça.
+
+**2 et 3. Écran de sélection simplifié.** Les boutons "Poste X"
+individuels ont été retirés de `SelectionEcran.jsx` — "Écran Master"
+voit déjà tous les postes, un doublon inutile pour qui atterrit sur cet
+écran (manager/admin sans poste assigné ; un cuisinier avec poste
+assigné ne voit de toute façon jamais cet écran, routé directement).
+"Service" (Phase 5quater) n'est plus proposé qu'au rôle **serveur**
+(`ROLES_SERVICE = ['serveur']` dans `App.jsx`, au lieu de `['serveur',
+'manager', 'admin']`) — un manager/admin a déjà Master et Caisse,
+strictement plus complets. Un serveur ne voit donc plus que "Caisse" et
+"Service" sur cet écran ; un manager/admin voit "Tableau de bord",
+"Caisse", "Écran Master" — plus aucun doublon des deux côtés.
+
+**5 (suite). Mobile Money replié derrière une catégorie.** Les 6
+pastilles à plat (Espèces/Wave/Orange Money/Momo/Carte/Autre,
+Phase 5quinquies) redeviennent 4 catégories au premier niveau
+(Espèces/Mobile Money/Carte/Autre) — cliquer "Mobile Money" révèle une
+deuxième rangée avec les 3 opérateurs (Wave présélectionné par défaut,
+modifiable). `Order.ModePaiement` n'a **pas** de valeur "mobile_money"
+générique (retirée en Phase 5quinquies) — c'est purement un regroupement
+d'affichage côté `CaisseScreen.jsx`, `modePaiement` reste toujours l'un
+des 3 opérateurs concrets une fois choisi, jamais une catégorie
+intermédiaire envoyée au backend.
+
+Testé de bout en bout en local (comptes `demo` et `serveur1`
+reconstitués via `seed_demo` après un redémarrage de Docker Desktop qui
+avait fait perdre l'état de la base locale) : écran de sélection manager
+sans bouton "Poste"/"Service" ; écran de sélection serveur limité à
+Caisse/Service, Master absent ; catégorie "Mobile Money" repliée par
+défaut, Wave/Orange Money/Momo révélés au clic. Déployé (`git push vps
+main`), bundle et service worker servis vérifiés directement par
+`curl` (présence de "Service", absence de "Cuisine (PIN)",
+`skipWaiting`/`clientsClaim` bien dans le `sw.js` généré).
 
 Se référer au document *Cahier des charges — Application KDS* (sections 4 à 7)
 pour le détail fonctionnel de chaque module.
