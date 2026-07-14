@@ -328,6 +328,27 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
 
         return Response(self.get_serializer(order).data)
 
+    @action(detail=True, methods=["post"], url_path="marquer-servi")
+    def marquer_servi(self, request, pk=None):
+        """
+        "Tout servir d'un coup" (écran serveur dédié, §5.1) — bascule en
+        une seule action tous les tickets actuellement prêts de cette
+        commande, quel que soit leur poste (cuisine, bar...). Une commande
+        peut avoir plusieurs tickets (un par poste) ; les tickets pas
+        encore prêts sont simplement ignorés plutôt que de faire échouer
+        l'action entière — un serveur doit pouvoir valider ce qui est prêt
+        maintenant et revenir plus tard pour le reste (ex: le bar est prêt,
+        pas encore la cuisine).
+        """
+
+        order = self.get_object()
+        tickets_prets = order.tickets.filter(statut=models.OrderTicket.Statut.PRET)
+        nb = tickets_prets.count()
+        for ticket in tickets_prets:
+            ticket.statut = models.OrderTicket.Statut.SERVI
+            ticket.save()
+        return Response({"detail": f"{nb} ticket(s) marqué(s) servi(s).", "nb_servis": nb})
+
     @action(detail=True, methods=["post"], url_path="add-items")
     def add_items(self, request, pk=None):
         """
@@ -457,6 +478,28 @@ class OrderItemViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
                 {"detail": "Cette ligne est déjà prête, servie ou annulée."}, status=status.HTTP_400_BAD_REQUEST
             )
         item.statut_ligne = models.OrderItem.StatutLigne.PRET
+        item.save()
+        return Response(self.get_serializer(item).data)
+
+    @action(detail=True, methods=["post"], url_path="marquer-servi")
+    def marquer_servi(self, request, pk=None):
+        """
+        Confirmation de service plat par plat (§5.1/§5.6) — pensée pour
+        l'écran serveur dédié (`ServeurScreen.jsx`, mobile), pas l'écran
+        cuisine : un plat "servir dès que prêt" doit pouvoir être confirmé
+        servi dès QU'IL est prêt, sans attendre que le reste du ticket le
+        soit (contrairement à `OrderTicketViewSet.bump`, qui sert tout le
+        ticket d'un coup). Le ticket passe automatiquement "servi" une fois
+        toutes ses lignes actives servies (cf. signals.py
+        `_sync_ticket_statut_depuis_lignes`).
+        """
+
+        item = self.get_object()
+        if item.statut_ligne != models.OrderItem.StatutLigne.PRET:
+            return Response(
+                {"detail": "Ce plat doit être prêt avant d'être marqué servi."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        item.statut_ligne = models.OrderItem.StatutLigne.SERVI
         item.save()
         return Response(self.get_serializer(item).data)
 

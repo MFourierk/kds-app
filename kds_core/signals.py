@@ -166,22 +166,43 @@ def _sync_ticket_statut_depuis_lignes(sender, instance, **kwargs):
     apparaître le bouton "Marquer servi" côté écran cuisine plutôt que de
     forcer la cuisine à attendre que tout soit prêt avant de rien voir.
 
+    Symétrique côté service (écran serveur dédié, `ServeurScreen.jsx`) :
+    une fois le ticket "prêt", chaque plat peut être confirmé servi
+    individuellement (`OrderItemViewSet.marquer_servi`) dès qu'IL est
+    prêt — un plat "servir dès que prêt" n'attend pas ses voisins. Le
+    ticket bascule "servi" tout seul une fois toutes ses lignes actives
+    servies, en repassant par "prêt" au passage si ce n'était pas déjà
+    fait (jamais de saut direct en_préparation → servi, sinon
+    `heure_pret` ne serait jamais horodaté — cf. `_stash_previous_state_
+    and_stamp_timestamps` — et fausserait les rapports de temps de
+    préparation, Phase 6).
+
     Diffuse aussi l'état du ticket même quand il ne bascule pas encore
-    "prêt" (un seul plat sur deux marqué prêt) — sinon l'écran cuisine ne
-    verrait jamais ce plat passer prêt en temps réel tant que le reste du
-    ticket n'a pas suivi.
+    (un seul plat sur deux marqué prêt/servi) — sinon l'écran cuisine ou
+    l'écran serveur ne verraient jamais ce plat avancer en temps réel
+    tant que le reste du ticket n'a pas suivi.
     """
 
-    if instance.statut_ligne != OrderItem.StatutLigne.PRET:
+    if instance.statut_ligne not in (OrderItem.StatutLigne.PRET, OrderItem.StatutLigne.SERVI):
         return
 
     ticket = instance.ticket
+    lignes_actives = ticket.lignes.exclude(statut_ligne=OrderItem.StatutLigne.ANNULE)
+
     if ticket.statut == OrderTicket.Statut.EN_PREPARATION:
-        lignes_actives = ticket.lignes.exclude(statut_ligne=OrderItem.StatutLigne.ANNULE)
-        tout_pret = not lignes_actives.exclude(statut_ligne=OrderItem.StatutLigne.PRET).exists()
-        if tout_pret:
+        tout_pret_ou_servi = not lignes_actives.exclude(
+            statut_ligne__in=[OrderItem.StatutLigne.PRET, OrderItem.StatutLigne.SERVI]
+        ).exists()
+        if tout_pret_ou_servi:
             ticket.statut = OrderTicket.Statut.PRET
             ticket.save()  # déclenche déjà `_broadcast` via le post_save de OrderTicket
+            ticket.refresh_from_db()
+
+    if ticket.statut == OrderTicket.Statut.PRET:
+        tout_servi = not lignes_actives.exclude(statut_ligne=OrderItem.StatutLigne.SERVI).exists()
+        if tout_servi:
+            ticket.statut = OrderTicket.Statut.SERVI
+            ticket.save()  # déclenche déjà `_broadcast`
             return
 
     _broadcast(ticket, created=False)

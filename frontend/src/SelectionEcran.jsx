@@ -7,8 +7,12 @@ import { fetchStations } from './api'
  * poste précis. Un cuisinier avec un poste assigné ne voit jamais cet
  * écran, il est routé directement (§6.2 : un écran dédié par poste en
  * cuisine, pas de choix à faire sur place).
+ *
+ * `masquerEcransCuisine` (rôle serveur) retire Master/postes de la liste
+ * — un serveur n'a pas à piloter la préparation cuisine, seulement à
+ * confirmer le service (`ServeurScreen.jsx`, cf. `afficherService`).
  */
-export default function SelectionEcran({ onChoisir, afficherTableauDeBord, afficherCaisse }) {
+export default function SelectionEcran({ onChoisir, afficherTableauDeBord, afficherCaisse, afficherService, masquerEcransCuisine }) {
   const [stations, setStations] = useState([])
   const [erreur, setErreur] = useState('')
 
@@ -42,22 +46,35 @@ export default function SelectionEcran({ onChoisir, afficherTableauDeBord, affic
         </button>
       )}
 
-      <button
-        onClick={() => onChoisir({ scopeId: 'master', titre: 'Écran Master' })}
-        className="w-72 rounded-xl bg-amber-500 py-4 text-lg font-semibold text-slate-900 hover:bg-amber-400"
-      >
-        Écran Master (tous les postes)
-      </button>
-
-      {stations.map((station) => (
+      {afficherService && (
         <button
-          key={station.id}
-          onClick={() => onChoisir({ scopeId: station.id, titre: `Poste ${station.nom}` })}
-          className="w-72 rounded-xl bg-slate-700 py-4 text-lg font-semibold text-slate-100 hover:bg-slate-600"
+          onClick={() => onChoisir({ scopeId: 'service', titre: 'Service' })}
+          className="w-72 rounded-xl border-2 border-emerald-400 bg-slate-800 py-4 text-lg font-semibold text-emerald-300 hover:bg-slate-700"
         >
-          Poste {station.nom}
+          🍽️ Service
         </button>
-      ))}
+      )}
+
+      {!masquerEcransCuisine && (
+        <>
+          <button
+            onClick={() => onChoisir({ scopeId: 'master', titre: 'Écran Master' })}
+            className="w-72 rounded-xl bg-amber-500 py-4 text-lg font-semibold text-slate-900 hover:bg-amber-400"
+          >
+            Écran Master (tous les postes)
+          </button>
+
+          {stations.map((station) => (
+            <button
+              key={station.id}
+              onClick={() => onChoisir({ scopeId: station.id, titre: `Poste ${station.nom}` })}
+              className="w-72 rounded-xl bg-slate-700 py-4 text-lg font-semibold text-slate-100 hover:bg-slate-600"
+            >
+              Poste {station.nom}
+            </button>
+          ))}
+        </>
+      )}
     </div>
   )
 }

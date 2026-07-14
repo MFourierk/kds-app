@@ -5,9 +5,11 @@ import KitchenScreen from './KitchenScreen'
 import SelectionEcran from './SelectionEcran'
 import AdminDashboard from './admin/AdminDashboard'
 import CaisseScreen from './CaisseScreen'
+import ServeurScreen from './ServeurScreen'
 
 const ROLES_DASHBOARD = ['manager', 'admin']
 const ROLES_CAISSE = ['serveur', 'manager', 'admin']
+const ROLES_SERVICE = ['serveur', 'manager', 'admin']
 
 function App() {
   const [connecte, setConnecte] = useState(() => Boolean(getTokens()?.access))
@@ -59,6 +61,8 @@ function App() {
         onChoisir={setEcran}
         afficherTableauDeBord={ROLES_DASHBOARD.includes(role)}
         afficherCaisse={ROLES_CAISSE.includes(role)}
+        afficherService={ROLES_SERVICE.includes(role)}
+        masquerEcransCuisine={role === 'serveur'}
       />
     )
   }
@@ -81,6 +85,15 @@ function App() {
     return (
       <CaisseScreen
         utilisateur={utilisateur}
+        onChangerEcran={() => setEcran('selection')}
+        onDeconnexion={() => setConnecte(false)}
+      />
+    )
+  }
+
+  if (ecran.scopeId === 'service') {
+    return (
+      <ServeurScreen
         onChangerEcran={() => setEcran('selection')}
         onDeconnexion={() => setConnecte(false)}
       />
