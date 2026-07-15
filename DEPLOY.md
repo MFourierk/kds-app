@@ -58,6 +58,76 @@ retirer proprement une fois la présentation faite (DNS chez le registrar, confi
 Nginx `/etc/nginx/sites-available/kds`, certificat Certbot). Ne pas le laisser
 traîner en prod sur le domaine d'un client.
 
+## Système de licence (abonnement)
+
+Le VPS est le **serveur maître** — c'est lui qui héberge les `LicenceClient`
+(un par installation cliente) et répond aux pointages. Chaque installation
+cliente (ex: un serveur local chez un restaurant) pointe périodiquement
+auprès du maître pour confirmer que son abonnement est à jour.
+
+### Côté maître (ce VPS)
+
+`.env` : `EST_SERVEUR_MAITRE=True` (les variables `LICENCE_MASTER_URL` /
+`LICENCE_IDENTIFIANT` / `LICENCE_CLE_API` restent vides — le maître ne pointe
+pas auprès de lui-même).
+
+Créer un client : Django admin → **Licence clients** → nouveau
+`LicenceClient` (identifiant, nom, date de prochaine échéance). `cle_api` est
+généré automatiquement à la sauvegarde — c'est cette valeur (avec
+`identifiant`) qu'il faut transmettre à l'installation cliente.
+
+### Côté client (installation locale chez un restaurant)
+
+`.env` :
+```
+EST_SERVEUR_MAITRE=False
+LICENCE_MASTER_URL=https://kds.behanian.com
+LICENCE_IDENTIFIANT=<identifiant du LicenceClient>
+LICENCE_CLE_API=<cle_api du LicenceClient>
+```
+
+Pointage périodique via `manage.py verifier_licence` (best-effort — ne
+bloque jamais l'app en cas d'échec réseau, met juste à jour le statut mis en
+cache localement `EtatLicenceLocal`). À planifier avec un timer systemd
+utilisateur (même logique que `kds-daphne.service`, pas de sudo) :
+
+```ini
+# ~/.config/systemd/user/kds-licence-check.service
+[Unit]
+Description=Pointage licence KDS
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/kds-app
+ExecStart=/opt/kds-app/venv/bin/python manage.py verifier_licence
+```
+
+```ini
+# ~/.config/systemd/user/kds-licence-check.timer
+[Unit]
+Description=Pointage licence KDS toutes les 6h
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+systemctl --user enable --now kds-licence-check.timer
+```
+
+### Paliers de sanction (§licence)
+
+| Retard | Statut | Effet |
+|---|---|---|
+| 0 jour | `actif` | Rien |
+| 1–14 jours | `retard` | Bandeau d'avertissement (manager/admin) |
+| 15–44 jours | `retard_prolonge` | + rapports (`/api/stats/*`) désactivés (403) |
+| ≥ 45 jours | `suspendu` | Accès API bloqué (402), écran de blocage plein écran |
+
 ## Commandes utiles côté serveur
 
 ```bash

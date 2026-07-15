@@ -17,6 +17,26 @@ class PosIntegrationAdmin(admin.ModelAdmin):
     readonly_fields = ("secret_hash",)
 
 
+@admin.register(models.LicenceClient)
+class LicenceClientAdmin(admin.ModelAdmin):
+    """
+    Gestion des abonnements clients (§licence) — UNIQUEMENT pertinent sur
+    le serveur maître. `cle_api` généré automatiquement à la création
+    (cf. `LicenceClient.save`) : à copier ici vers le `.env` de
+    l'installation cliente concernée (`LICENCE_CLE_API`).
+    """
+
+    list_display = ("nom_client", "identifiant", "statut_affiche", "date_prochaine_echeance", "dernier_pointage")
+    search_fields = ("nom_client", "identifiant")
+    readonly_fields = ("cle_api", "dernier_pointage", "statut_affiche")
+
+    @admin.display(description="Statut")
+    def statut_affiche(self, obj):
+        # `statut` est une propriété calculée (pas un champ), donc pas de
+        # `get_statut_display()` auto-généré par Django ici.
+        return models.LicenceClient.Statut(obj.statut).label
+
+
 @admin.register(models.Station)
 class StationAdmin(admin.ModelAdmin):
     list_display = ("nom", "tenant", "is_expo", "is_active", "ordre_affichage")

@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import models, services
-from .permissions import IsManagerOrAdmin, IsTenantMember
+from .permissions import IsManagerOrAdmin, IsTenantMember, LicenceRapportsAutorises
 
 PERIODE_PAR_DEFAUT = timedelta(hours=24)
 
@@ -32,7 +32,10 @@ def _resoudre_periode(request):
 
 
 class BaseStatsView(APIView):
-    permission_classes = [IsAuthenticated, IsTenantMember]
+    # `LicenceRapportsAutorises` : palier "retard prolongé" du modèle de
+    # sanction progressif (§licence) — désactive spécifiquement les
+    # rapports, sans toucher au reste de l'app.
+    permission_classes = [IsAuthenticated, IsTenantMember, LicenceRapportsAutorises]
 
 
 class TempsPreparationParPosteView(BaseStatsView):
@@ -141,7 +144,7 @@ class ProductiviteEmployesView(BaseStatsView):
     ticket concerné.
     """
 
-    permission_classes = [IsAuthenticated, IsTenantMember, IsManagerOrAdmin]
+    permission_classes = [IsAuthenticated, IsTenantMember, IsManagerOrAdmin, LicenceRapportsAutorises]
 
     def get(self, request):
         depuis, jusqu_a = _resoudre_periode(request)
@@ -217,7 +220,7 @@ class VentesParJourView(BaseStatsView):
     sa caisse.
     """
 
-    permission_classes = [IsAuthenticated, IsTenantMember, IsManagerOrAdmin]
+    permission_classes = [IsAuthenticated, IsTenantMember, IsManagerOrAdmin, LicenceRapportsAutorises]
 
     def get(self, request):
         jour = parse_date(request.query_params.get("date", "")) or timezone.localdate()

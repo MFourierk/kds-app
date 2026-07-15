@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework.permissions import BasePermission
 
 from .models import User
@@ -51,3 +52,24 @@ class IsAdmin(BasePermission):
     def has_permission(self, request, view):
         user = request.user
         return bool(user and user.is_authenticated and getattr(user, "role", None) == User.Role.ADMIN)
+
+
+class LicenceRapportsAutorises(BasePermission):
+    """
+    Palier intermédiaire du modèle de sanction progressif (§licence,
+    "retard prolongé" — 15 à 45 jours de retard de paiement) : les
+    rapports (`stats_views.py`) sont désactivés, tout le reste de l'app
+    continue de fonctionner normalement. Jamais actif sur le serveur
+    maître, ni avant ce palier ("actif"/"retard" simple = juste un
+    bandeau d'avertissement, pas de restriction fonctionnelle).
+    """
+
+    message = "Rapports temporairement indisponibles — abonnement en retard de paiement. Contactez votre prestataire."
+
+    def has_permission(self, request, view):
+        if settings.EST_SERVEUR_MAITRE:
+            return True
+        from .models import EtatLicenceLocal, LicenceClient
+
+        statut = EtatLicenceLocal.instance().statut
+        return statut not in (LicenceClient.Statut.RETARD_PROLONGE, LicenceClient.Statut.SUSPENDU)

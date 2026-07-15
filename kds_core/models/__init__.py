@@ -1,6 +1,7 @@
 from .base import TenantScopedModel, TimeStampedModel, UUIDModel
 from .catalog import MenuCategory, MenuItem, Modifier, Station
 from .integrations import PosIntegration
+from .licence import EtatLicenceLocal, LicenceClient
 from .orders import Order, OrderItem, OrderTicket, TicketStatusLog
 from .tables import RestaurantTable
 from .tenants import Tenant
@@ -22,4 +23,6 @@ __all__ = [
     "OrderItem",
     "TicketStatusLog",
     "PosIntegration",
+    "LicenceClient",
+    "EtatLicenceLocal",
 ]

@@ -38,6 +38,18 @@ ALLOWED_HOSTS = [h.strip() for h in config('ALLOWED_HOSTS', default='').split(',
 CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS]
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# --- Licence (§licence) ---
+# `EST_SERVEUR_MAITRE=True` UNIQUEMENT sur l'installation qui héberge les
+# abonnements de tous les clients (le VPS, à terme sur son propre domaine) —
+# cette installation ne pointe jamais vers elle-même et n'applique jamais les
+# restrictions. Toute installation cliente laisse `EST_SERVEUR_MAITRE` à
+# `False` et renseigne les trois autres réglages pour se signaler
+# périodiquement (`manage.py verifier_licence`, cf. README).
+EST_SERVEUR_MAITRE = config('EST_SERVEUR_MAITRE', default=False, cast=bool)
+LICENCE_MASTER_URL = config('LICENCE_MASTER_URL', default='').rstrip('/')
+LICENCE_IDENTIFIANT = config('LICENCE_IDENTIFIANT', default='')
+LICENCE_CLE_API = config('LICENCE_CLE_API', default='')
+
 
 # Application definition
 
@@ -73,6 +85,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'kds_core.middleware.CurrentUserMiddleware',
+    'kds_core.middleware.LicenceEnforcementMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'

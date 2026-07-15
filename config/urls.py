@@ -21,6 +21,7 @@ from django.urls import include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from kds_core.auth_views import KioskStaffListView, PinLoginView
+from kds_core.licence_views import LicencePointageView, LicenceStatutView
 from kds_core.pos_views import PosOrderCancelView, PosOrderCreateView, PosOrderPaymentView
 from kds_core.qr_views import QrCallWaiterView, QrMenuView, QrOrderCreateView, QrOrderStatusView
 from kds_core.stats_views import (
@@ -51,6 +52,8 @@ urlpatterns = [
     path('api/stats/productivite-employes/', ProductiviteEmployesView.as_view(), name='stats_productivite'),
     path('api/stats/gaspillage/', GaspillageView.as_view(), name='stats_gaspillage'),
     path('api/stats/ventes/', VentesParJourView.as_view(), name='stats_ventes'),
+    path('api/licence/pointage/', LicencePointageView.as_view(), name='licence_pointage'),
+    path('api/licence/statut/', LicenceStatutView.as_view(), name='licence_statut'),
     path('api/', include('kds_core.urls')),
 ]
 

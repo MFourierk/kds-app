@@ -137,6 +137,19 @@ export async function fetchStations() {
 }
 
 /**
+ * Statut de licence (§licence) — `actif` sur le serveur maître comme sur
+ * une installation cliente à jour. Jamais bloquant à l'appel lui-même :
+ * en cas d'erreur (ex: déploiement fraîchement mis à jour), `App.jsx`
+ * traite ça comme "actif" plutôt que de bloquer l'app sur un détail
+ * réseau.
+ */
+export async function fetchLicenceStatut() {
+  const response = await apiFetch('/api/licence/statut/')
+  if (!response.ok) throw new Error('Impossible de récupérer le statut de licence.')
+  return response.json()
+}
+
+/**
  * `TenantViewSet` (staff, authentifié) ne renvoie jamais qu'un seul
  * établissement — celui de l'utilisateur connecté — mais reste une
  * liste côté API (`ListModelMixin`, pas de endpoint singulier dédié).
