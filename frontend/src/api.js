@@ -1,4 +1,11 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+// `|| ''` : sur le paquet d'installation client (§installer), l'app est
+// buildée UNE FOIS puis déployée telle quelle chez des clients ayant chacun
+// une IP LAN différente — pas d'URL absolue possible à la compilation. Une
+// env var absente vaut `undefined` (pas `''`) côté Vite ; sans ce fallback,
+// tout appel deviendrait `fetch("undefined/api/...")`. Racine vide = appel
+// relatif, résolu contre l'origine servie par le navigateur (marche pour le
+// build VPS aussi, qui garde une URL absolue explicite via .env.production).
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 const TOKEN_STORAGE_KEY = 'kds_tokens'
 
@@ -59,7 +66,11 @@ export async function loginPin(username, pin) {
  * tenant à l'écran).
  */
 export async function fetchKioskStaff() {
-  const slug = import.meta.env.VITE_TENANT_SLUG
+  // `window.__ENV__` (deploy/client-package/40-generate-env-config.sh) : sur
+  // le paquet d'installation client, le slug n'est connu qu'à l'installation
+  // (une valeur par client), pas à la compilation comme sur le build VPS —
+  // injecté au démarrage du conteneur nginx plutôt que baked-in au build.
+  const slug = window.__ENV__?.VITE_TENANT_SLUG || import.meta.env.VITE_TENANT_SLUG
   const response = await fetch(`${API_BASE_URL}/api/kiosk/staff/?tenant=${encodeURIComponent(slug)}`)
   if (!response.ok) throw new Error('Impossible de charger la liste du personnel.')
   return response.json()
@@ -121,7 +132,12 @@ export async function apiFetch(path, options = {}) {
 }
 
 export function wsBaseUrl() {
-  return import.meta.env.VITE_WS_BASE_URL
+  if (import.meta.env.VITE_WS_BASE_URL) return import.meta.env.VITE_WS_BASE_URL
+  // Même raisonnement que API_BASE_URL ci-dessus (§installer) : sans URL
+  // absolue baked-in, dérive le bon schéma/hôte depuis la page elle-même —
+  // `ws://` sur une install cliente en HTTP simple, `wss://` sur le VPS.
+  const protocole = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${protocole}://${window.location.host}`
 }
 
 export async function fetchMe() {

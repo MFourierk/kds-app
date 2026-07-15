@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+// cf. src/api.js pour le raisonnement complet (§installer, paquet client)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 // Texte validé pour le cas 1 (le téléphone du client n'a lui-même aucune
 // connexion — cf. README backend "Deux messages hors-ligne distincts").

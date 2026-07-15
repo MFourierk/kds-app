@@ -1,0 +1,91 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - kds_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/client-package/Dockerfile.backend
+    image: kds-backend:${KDS_VERSION:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - kds_media:/app/media
+      - kds_static:/app/staticfiles
+    # `entrypoint-backend.sh` fait migrate+collectstatic AVANT de démarrer
+    # Daphne — ce port ne répond donc qu'une fois les migrations terminées.
+    # Sans ce healthcheck, `depends_on` attend seulement que le conteneur
+    # démarre (pas que l'app soit prête), et frontend/licence-checker
+    # peuvent taper la base avant que les tables existent (bug constaté à
+    # l'essai local : `licence-checker` en erreur "relation ... does not
+    # exist" au tout premier démarrage).
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8001), 2)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: deploy/client-package/Dockerfile.frontend
+    image: kds-frontend:${KDS_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      TENANT_SLUG: ${TENANT_SLUG}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - kds_media:/usr/share/nginx/media:ro
+      - kds_static:/usr/share/nginx/static:ro
+
+  # Pas d'équivalent natif systemd-timer/cron en Compose — ce sidecar réutilise
+  # l'image backend, contourne entrypoint-backend.sh (pas de migrate/collectstatic/
+  # daphne ici) et boucle simplement le pointage licence toutes les 6h, même
+  # cadence que le timer systemd documenté pour le VPS maître (cf. DEPLOY.md).
+  # `verifier_licence` est déjà best-effort (ne plante jamais sans réseau).
+  licence-checker:
+    image: kds-backend:${KDS_VERSION:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      backend:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "while true; do python manage.py verifier_licence; sleep 21600; done"
+
+volumes:
+  kds_pg_data:
+  kds_media:
+  kds_static:

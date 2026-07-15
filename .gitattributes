@@ -1,0 +1,10 @@
+# Ces fichiers sont copiés tels quels dans des images Docker Linux (COPY,
+# entrypoints) ou exécutés directement sur Ubuntu (VPS/client) — un
+# checkout Windows avec `core.autocrlf=true` (actif sur ce poste)
+# convertirait sinon leurs fins de ligne en CRLF, cassant le shebang
+# (`#!/bin/sh\r` → "no such file or directory") au premier `docker build`
+# ou `./install.sh` fait après un nouveau clone sur Windows.
+*.sh text eol=lf
+deploy/client-package/Dockerfile.* text eol=lf
+deploy/client-package/*.conf text eol=lf
+deploy/client-package/*.yml text eol=lf

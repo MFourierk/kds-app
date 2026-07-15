@@ -29,14 +29,23 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = [h.strip() for h in config('ALLOWED_HOSTS', default='').split(',') if h.strip()]
 
-# Derrière un reverse proxy Nginx (prod) : Nginx termine le TLS et parle en
-# clair à Daphne en interne, donc Django ne voit jamais directement
-# `https://` sans ces deux réglages — nécessaire pour que Django admin
-# (CSRF, cookies sécurisés) fonctionne correctement une fois exposé via un
-# vrai domaine. Inertes en dev (`ALLOWED_HOSTS` vide → liste vide, Nginx
-# absent → header jamais envoyé).
-CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS]
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Derrière un reverse proxy Nginx qui termine du vrai TLS (le VPS, un
+# domaine public) : Django ne voit jamais directement `https://` sans ces
+# deux réglages — nécessaire pour que Django admin (CSRF, cookies sécurisés)
+# fonctionne correctement une fois exposé via un vrai domaine. Faux en
+# revanche pour une installation cliente sur un simple réseau local
+# (§installer, deploy/client-package) : pas de domaine public donc pas de
+# certificat possible, l'app y tourne volontairement en HTTP simple — y
+# forcer `https://` ferait échouer le login Django admin (CSRF_TRUSTED_ORIGINS
+# validé au schéma près). `USE_HTTPS_REVERSE_PROXY` par défaut à `True`
+# préserve exactement le comportement actuel du VPS sans toucher son `.env` ;
+# le paquet client le passe à `False`.
+USE_HTTPS_REVERSE_PROXY = config('USE_HTTPS_REVERSE_PROXY', default=True, cast=bool)
+CSRF_TRUSTED_ORIGINS = [
+    f"{'https' if USE_HTTPS_REVERSE_PROXY else 'http'}://{h}" for h in ALLOWED_HOSTS
+]
+if USE_HTTPS_REVERSE_PROXY:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # --- Licence (§licence) ---
 # `EST_SERVEUR_MAITRE=True` UNIQUEMENT sur l'installation qui héberge les

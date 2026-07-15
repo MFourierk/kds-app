@@ -25,6 +25,8 @@ requirements.txt
 docker-compose.yml          ← Postgres + Redis pour le dev local (Postgres exposé sur le port hôte 5433, voir plus bas)
 .env                        ← copié depuis .env.example, chargé automatiquement via python-decouple
 frontend/                   ← React + Vite + Tailwind (écran Master pour l'instant, cf. section Frontend)
+deploy/client-package/      ← paquet d'installation Docker pour une installation cliente (hors ligne, cf. DEPLOY.md)
+scripts/build-client-package.sh  ← construit ce paquet (cf. DEPLOY.md)
 ```
 
 ## Installation (déjà réalisée sur ce poste — historique pour référence / réinstallation ailleurs)
@@ -1985,6 +1987,39 @@ vrai JWT). Rendu frontend confirmé par Playwright pour les deux états
 manager). Données de test (`.env`, `LicenceClient` de test,
 `EtatLicenceLocal`) nettoyées après coup — voir `DEPLOY.md` pour la
 configuration réelle maître (VPS)/client.
+
+### Phase installer — Paquet d'installation client (Docker, hors ligne)
+
+Suite directe de la phase licence : une fois le mécanisme d'abonnement en
+place, il fallait un moyen réel d'installer une nouvelle instance chez un
+client — sur son propre serveur local, potentiellement **sans aucun accès
+internet sur place** (clé USB). Détail complet (architecture Docker,
+`setup_tenant`, construction/distribution du paquet, séquence d'installation)
+dans `DEPLOY.md`, section "Paquet d'installation client" — ce README ne
+documente que ce qui a changé côté code applicatif pour le rendre possible :
+
+- **Frontend build-once, deploy-anywhere** : le frontend ne peut plus
+  embarquer une URL d'API absolue (`VITE_API_BASE_URL`/`VITE_WS_BASE_URL`) —
+  contrairement au build VPS (une seule IP/domaine connu), ce paquet est
+  construit **une fois** puis installé chez des clients ayant chacun une IP
+  LAN différente. `api.js`/`clientApi.js` retombent maintenant sur des appels
+  relatifs (même origine que la page servie) quand ces variables sont vides ;
+  `wsBaseUrl()` dérive `ws://`/`wss://` depuis `window.location` plutôt qu'une
+  valeur figée. Le slug du tenant (`VITE_TENANT_SLUG`, utilisé par la
+  connexion PIN kiosque) pose un problème différent — pas une URL, une vraie
+  valeur par client, décidée seulement à l'installation — résolu par un petit
+  mécanisme de configuration au runtime (`frontend/public/env-config.js`,
+  réécrit par le conteneur nginx au démarrage) plutôt qu'au build.
+- **`manage.py setup_tenant`** (nouvelle commande) : onboarding non
+  interactif d'un vrai client — crée un `Tenant` + un premier compte admin,
+  rien de plus (contrairement à `seed_demo`, qui scaffold un jeu de données
+  complet). Le client configure sa vraie carte/postes/équipe lui-même via le
+  tableau de bord existant (Phase 6) après sa première connexion.
+- **`USE_HTTPS_REVERSE_PROXY`** (nouveau réglage) : `SECURE_PROXY_SSL_HEADER`/
+  `CSRF_TRUSTED_ORIGINS` supposaient jusqu'ici un Nginx qui termine du vrai
+  TLS (vrai pour le VPS, faux pour une installation cliente en HTTP simple
+  sur un LAN sans domaine public — y forcer `https://` aurait fait échouer le
+  login Django admin). Défaut `True`, comportement du VPS inchangé.
 
 Se référer au document *Cahier des charges — Application KDS* (sections 4 à 7)
 pour le détail fonctionnel de chaque module.

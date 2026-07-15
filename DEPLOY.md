@@ -128,6 +128,65 @@ systemctl --user enable --now kds-licence-check.timer
 | 15–44 jours | `retard_prolonge` | + rapports (`/api/stats/*`) désactivés (403) |
 | ≥ 45 jours | `suspendu` | Accès API bloqué (402), écran de blocage plein écran |
 
+## Paquet d'installation client (Docker, hors ligne)
+
+**Mécanisme séparé de `git push vps`** : celui-ci met à jour l'app *de ce
+VPS*. Le paquet décrit ici sert à installer une **nouvelle instance
+indépendante**, chez un client, sur son propre serveur local — typiquement
+sans accès internet sur place (cf. §licence, chaque installation cliente
+pointe périodiquement vers ce VPS, mais reste pleinement fonctionnelle entre
+deux pointages).
+
+Toute la mécanique est sous `deploy/client-package/` : deux images Docker
+(backend Django/Daphne, frontend nginx) construites une seule fois puis
+`docker save`/`docker load` — pas de paquet système à récupérer sur place,
+robuste aux différences de version d'Ubuntu d'un site client à l'autre.
+
+### Construire le paquet (sur la machine de l'opérateur — Docker Desktop + Node, jamais sur le VPS)
+
+```bash
+./scripts/build-client-package.sh
+```
+
+Produit `dist-client-package/kds-client-<version>.tar.gz` — build frontend
+(profil `client-package`, URLs relatives, cf. `frontend/.env.client-package`),
+build + `docker save` des deux images, assemblage avec `install.sh` et un
+gabarit `.env`.
+
+### Distribuer le paquet
+
+- **Via le VPS** : `scp` le `.tar.gz` vers `~/kds-client-packages/` (dossier
+  dédié, distinct de `~/kds-deploy.git`) — l'opérateur peut ensuite le
+  récupérer en SSH depuis n'importe où.
+- **Via clé USB** : copier directement le `.tar.gz`, aucun VPS impliqué —
+  seule option si le site client n'a ni internet ni accès au VPS au moment
+  de l'installation.
+
+### Installer chez le client
+
+Prérequis unique : Docker Engine déjà installé sur la machine cible (fait au
+bureau, avec internet, `curl -fsSL https://get.docker.com | sh` — jamais
+fait par le paquet lui-même).
+
+```bash
+tar xzf kds-client-<version>.tar.gz
+cd kds-client-<version>
+./install.sh
+```
+
+`install.sh` charge les images, demande le nom de l'établissement, le
+premier compte admin, et l'identifiant/clé API de licence (créés au
+préalable via `/admin/` sur ce VPS, cf. §licence ci-dessus — aucune
+vérification réseau à cette étape). Aucun besoin d'internet du début à la
+fin ; la vérification de licence (`verifier_licence`, conteneur
+`licence-checker`) se synchronisera automatiquement dès que la connexion
+sera rétablie, sans action supplémentaire.
+
+Une fois installé, le client configure lui-même sa vraie carte/postes/équipe
+via le tableau de bord (onglets Menu/Postes/Équipe/Établissement, déjà
+construits) — le paquet ne crée que le tenant et le premier compte admin
+(`manage.py setup_tenant`), volontairement rien de plus.
+
 ## Commandes utiles côté serveur
 
 ```bash

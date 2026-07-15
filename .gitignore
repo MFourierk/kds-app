@@ -22,6 +22,10 @@ frontend/node_modules/
 .test-driver/
 .vscode/
 
+# Artefacts du paquet d'installation client (images Docker, tar.gz) —
+# générés par scripts/build-client-package.sh, jamais versionnés.
+dist-client-package/
+
 # OS
 .DS_Store
 Thumbs.db
