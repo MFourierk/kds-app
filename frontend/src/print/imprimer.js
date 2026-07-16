@@ -105,8 +105,16 @@ const STYLE_TICKET = `
  * Ouvre la fenêtre d'aperçu et déclenche le dialogue d'impression natif.
  * `window.open` doit être appelé de façon synchrone depuis un handler de
  * clic — sinon la plupart des navigateurs bloquent le popup.
+ *
+ * `autoriserImpression` (§interface serveur, demandé après coup) : un
+ * serveur ne doit avoir accès qu'à la *consultation* de la facture, pas à
+ * l'impression (réservée manager/admin, cf. `CaisseScreen.jsx`) — retire
+ * simplement le bouton "Imprimer" de l'aperçu dans ce cas. N'empêche pas
+ * un utilisateur déterminé d'imprimer quand même via le raccourci natif
+ * du navigateur (Ctrl+P) : ce n'est pas une vraie barrière de sécurité,
+ * juste le geste normal retiré de l'écran.
  */
-export function ouvrirApercuImpression(titre, corpsHtml) {
+export function ouvrirApercuImpression(titre, corpsHtml, { autoriserImpression = true } = {}) {
   const html = `<!doctype html>
 <html lang="fr">
 <head>
@@ -116,7 +124,7 @@ export function ouvrirApercuImpression(titre, corpsHtml) {
 </head>
 <body>
 ${corpsHtml}
-<button class="bouton-imprimer" onclick="window.print()">🖨️ Imprimer</button>
+${autoriserImpression ? '<button class="bouton-imprimer" onclick="window.print()">🖨️ Imprimer</button>' : ''}
 </body>
 </html>`
 

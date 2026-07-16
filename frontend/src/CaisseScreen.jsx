@@ -17,17 +17,16 @@ const CATEGORIES_PAIEMENT = { especes: 'Espèces', mobile_money: 'Mobile Money',
  * Écran caisse (§5.5, demandé après coup avec le reçu de caisse) :
  * liste des commandes non payées, avec deux niveaux d'action distincts
  * selon le rôle —
- * - **Tout le staff** (serveur compris) : imprimer la facture (montant
- *   dû + détail, sans info de paiement) pour l'apporter à table. Aperçu
- *   HTML local (`print/imprimer.js`) — aucun appel backend, n'importe
- *   quelle imprimante installée sur le poste via le dialogue du
- *   navigateur.
- * - **Manager/admin uniquement** : encaisser (mode de paiement, montant
- *   reçu en espèces, calcul de la monnaie) — le rôle serveur sera
- *   reconsidéré plus tard pour cette partie, cf. discussion produit.
- * Correspond exactement au gate déjà posé côté backend
- * (`OrderViewSet.get_permissions` — `encaisser` réservé
- * `IsManagerOrAdmin`).
+ * - **Serveur** : consultation seule de la facture (montant dû + détail,
+ *   sans info de paiement) — aperçu HTML local (`print/imprimer.js`),
+ *   sans le bouton d'impression (§interface serveur : "Facture" = un des
+ *   3 écrans dédiés au rôle serveur, consultation uniquement).
+ * - **Manager/admin uniquement** : impression de la facture/du reçu, ET
+ *   encaissement (mode de paiement, montant reçu en espèces, calcul de la
+ *   monnaie). Correspond exactement au gate déjà posé côté backend pour
+ *   l'encaissement (`OrderViewSet.get_permissions` — `encaisser` réservé
+ *   `IsManagerOrAdmin`) ; l'impression n'a pas d'équivalent backend (aperçu
+ *   généré côté écran), le gate est purement frontend ici.
  */
 export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexion }) {
   const [commandes, setCommandes] = useState(null)
@@ -40,6 +39,10 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
   const [tenant, setTenant] = useState(null)
 
   const peutEncaisser = ROLES_ENCAISSEMENT.includes(utilisateur?.role)
+  // Même liste de rôles qu'`ROLES_ENCAISSEMENT` aujourd'hui, mais nommée à
+  // part : ce sont deux permissions distinctes (imprimer / encaisser) qui
+  // pourraient diverger plus tard, pas la même règle recyclée par hasard.
+  const peutImprimer = ROLES_ENCAISSEMENT.includes(utilisateur?.role)
 
   function recharger() {
     apiFetch('/api/orders/?statut_paiement=en_attente')
@@ -70,7 +73,9 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
     // reçu (payée) selon `commande.statut_paiement`.
     const payee = commande.statut_paiement === 'payee'
     const titre = payee ? `Reçu — Table ${commande.table_numero ?? '—'}` : `Facture — Table ${commande.table_numero ?? '—'}`
-    const ouvert = ouvrirApercuImpression(titre, construireRecuHTML(tenant, commande))
+    const ouvert = ouvrirApercuImpression(titre, construireRecuHTML(tenant, commande), {
+      autoriserImpression: peutImprimer,
+    })
     if (!ouvert) {
       afficherMessage('Aperçu bloqué par le navigateur — autorisez les pop-ups pour ce site.', true)
     }
@@ -269,7 +274,7 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
                     onClick={() => imprimerFacture(commande)}
                     className="flex-1 rounded-lg bg-slate-700 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
                   >
-                    🖨️ Facture
+                    {peutImprimer ? '🖨️ Facture' : '👁️ Consulter'}
                   </button>
                   {peutEncaisser && (
                     <button
