@@ -72,8 +72,14 @@ export const classeInput =
 
 export function Table({ colonnes, children }) {
   return (
-    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
-      <table className="w-full text-sm">
+    // `overflow-x-auto` (pas `overflow-hidden`) : sur un écran étroit, ce
+    // tableau dépasse largement la largeur visible (colonnes Statut/Actions
+    // en plus de Nom/Identifiant/Rôle) — `overflow-hidden` les coupait
+    // purement et simplement, sans aucune indication qu'on pouvait faire
+    // défiler pour les voir (trouvé en marge de l'essai d'installation
+    // client, onglet Équipe sur un vrai téléphone).
+    <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+      <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/80 text-left">
             {colonnes.map((c) => (
