@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { logout } from '../api'
+import { useEffect, useState } from 'react'
+import { fetchTenant, logout } from '../api'
 import RapportsTab from './RapportsTab'
 import GestionMenu from './GestionMenu'
 import GestionPostes from './GestionPostes'
@@ -27,17 +27,70 @@ const LIBELLE_ROLE = { admin: 'Administrateur', manager: 'Manager', cuisinier: '
 
 export default function AdminDashboard({ utilisateur, onChangerEcran, onDeconnexion }) {
   const [ongletId, setOngletId] = useState('rapports')
+  const [menuMobileOuvert, setMenuMobileOuvert] = useState(false)
+  const [tenant, setTenant] = useState(null)
   const onglet = ONGLETS.find((o) => o.id === ongletId)
   const Onglet = onglet.Composant
   const nomAffiche = utilisateur
     ? `${utilisateur.first_name} ${utilisateur.last_name}`.trim() || utilisateur.username
     : ''
+  const nomEtablissement = tenant?.nom_etablissement ?? '...'
+
+  // Jamais bloquant si ça échoue (même logique que CaisseScreen/EtablissementTab)
+  // — le nom de l'établissement était en dur ("Restaurant Démo") depuis la
+  // première version de cet écran, jamais remarqué faute d'avoir jamais
+  // testé avec un tenant réel différent du jeu de démo avant l'essai
+  // d'installation client sur la VM.
+  useEffect(() => {
+    fetchTenant().then(setTenant).catch(() => {})
+  }, [])
+
+  function choisirOnglet(id) {
+    setOngletId(id)
+    setMenuMobileOuvert(false)
+  }
 
   return (
-    <div className="flex h-full bg-gray-100">
-      <aside className="flex w-64 shrink-0 flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900">
+    <div className="flex h-full flex-col bg-gray-100 md:flex-row">
+      {/* Barre mobile : la sidebar fixe (256px) ne peut pas cohabiter avec le
+          contenu sur un écran de téléphone — devient un tiroir masqué par
+          défaut, ouvert via ce bouton ☰ (jamais testé sur un vrai téléphone
+          avant l'essai d'installation client sur la VM, seulement "en plein
+          écran" comme documenté dans le README). */}
+      <div className="flex items-center justify-between border-b border-white/10 bg-slate-950 px-4 py-3 md:hidden">
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-400">
+            {nomEtablissement}
+          </p>
+          <h1 className="text-base font-bold text-white">
+            {onglet.icone} {onglet.label}
+          </h1>
+        </div>
+        <button
+          onClick={() => setMenuMobileOuvert(true)}
+          className="shrink-0 rounded-lg p-2 text-xl text-white hover:bg-white/10"
+          aria-label="Ouvrir le menu"
+        >
+          ☰
+        </button>
+      </div>
+
+      {menuMobileOuvert && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMenuMobileOuvert(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 -translate-x-full flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900 transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
+          menuMobileOuvert ? 'translate-x-0' : ''
+        }`}
+      >
         <div className="border-b border-white/10 px-6 py-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-400">Restaurant Démo</p>
+          <p className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-amber-400">
+            {nomEtablissement}
+          </p>
           <h1 className="mt-1 text-xl font-bold text-white">Tableau de bord</h1>
         </div>
 
@@ -45,7 +98,7 @@ export default function AdminDashboard({ utilisateur, onChangerEcran, onDeconnex
           {ONGLETS.map((o) => (
             <button
               key={o.id}
-              onClick={() => setOngletId(o.id)}
+              onClick={() => choisirOnglet(o.id)}
               className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition ${
                 ongletId === o.id
                   ? 'bg-white/10 text-white shadow-inner ring-1 ring-amber-400/40'
@@ -97,15 +150,15 @@ export default function AdminDashboard({ utilisateur, onChangerEcran, onDeconnex
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        <header className="border-b border-gray-200 bg-white px-8 py-6">
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <header className="hidden border-b border-gray-200 bg-white px-8 py-6 md:block">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">{onglet.description}</p>
           <h2 className="mt-1 text-2xl font-bold text-gray-900">
             {onglet.icone} {onglet.label}
           </h2>
         </header>
 
-        <div className="p-8">
+        <div className="p-4 md:p-8">
           <Onglet utilisateur={utilisateur} />
         </div>
       </main>
