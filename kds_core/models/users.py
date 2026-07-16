@@ -17,6 +17,9 @@ class User(AbstractUser):
         MANAGER = "manager", "Manager"
         CUISINIER = "cuisinier", "Cuisinier"
         SERVEUR = "serveur", "Serveur"
+        # Vente comptoir uniquement (écran TPE) — pas de poste cuisine, pas
+        # d'accès au tableau de bord, cf. `VenteComptoirScreen.jsx`.
+        CAISSIER = "caissier", "Caissière"
 
     tenant = models.ForeignKey(
         "kds_core.Tenant",

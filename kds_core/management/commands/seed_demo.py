@@ -9,6 +9,8 @@ DEMO_CUISINIER_USERNAME = "cuisine1"
 DEMO_CUISINIER_PIN = "1234"
 DEMO_SERVEUR_USERNAME = "serveur1"
 DEMO_SERVEUR_PIN = "1234"
+DEMO_CAISSIER_USERNAME = "caissiere1"
+DEMO_CAISSIER_PIN = "1234"
 
 
 class Command(BaseCommand):
@@ -212,6 +214,22 @@ class Command(BaseCommand):
             serveur.set_pin(DEMO_SERVEUR_PIN)
             serveur.save()
 
+        caissier, created = models.User.objects.get_or_create(
+            username=DEMO_CAISSIER_USERNAME,
+            defaults={
+                "tenant": tenant,
+                "role": models.User.Role.CAISSIER,
+                "first_name": "Caissière",
+                "last_name": "Démo",
+            },
+        )
+        if created or not caissier.pin_code:
+            caissier.tenant = tenant
+            caissier.role = models.User.Role.CAISSIER
+            caissier.set_unusable_password()  # pas de mot de passe, connexion PIN uniquement
+            caissier.set_pin(DEMO_CAISSIER_PIN)
+            caissier.save()
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Données de démo prêtes pour « {tenant.nom_etablissement} » "
@@ -221,7 +239,9 @@ class Command(BaseCommand):
                 f"Connexion cuisine (PIN) : POST /api/auth/pin-login/ avec "
                 f'{{"username": "{DEMO_CUISINIER_USERNAME}", "pin": "{DEMO_CUISINIER_PIN}"}}\n'
                 f"Connexion serveur (PIN) : POST /api/auth/pin-login/ avec "
-                f'{{"username": "{DEMO_SERVEUR_USERNAME}", "pin": "{DEMO_SERVEUR_PIN}"}}'
+                f'{{"username": "{DEMO_SERVEUR_USERNAME}", "pin": "{DEMO_SERVEUR_PIN}"}}\n'
+                f"Connexion caissière (PIN) : POST /api/auth/pin-login/ avec "
+                f'{{"username": "{DEMO_CAISSIER_USERNAME}", "pin": "{DEMO_CAISSIER_PIN}"}}'
             )
         )
 

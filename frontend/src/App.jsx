@@ -7,6 +7,7 @@ import AdminDashboard from './admin/AdminDashboard'
 import CaisseScreen from './CaisseScreen'
 import ServeurScreen from './ServeurScreen'
 import PrendreCommandeScreen from './PrendreCommandeScreen'
+import VenteComptoirScreen from './VenteComptoirScreen'
 
 const ROLES_DASHBOARD = ['manager', 'admin']
 const ROLES_CAISSE = ['serveur', 'manager', 'admin']
@@ -74,6 +75,16 @@ function App() {
       if (annule) return
       setRole(moi.role)
       setUtilisateur(moi)
+
+      // Caissier·ère (§TPE) : un seul écran, jamais de sélecteur — même
+      // mécanique de verrouillage que le poste cuisine ci-dessous, mais
+      // basée sur le rôle plutôt que sur `station_assignee` (elle n'a pas
+      // de poste de préparation).
+      if (moi.role === 'caissier') {
+        setEcran({ scopeId: 'comptoir', titre: 'Vente comptoir' })
+        setEcranVerrouille(true)
+        return
+      }
 
       if (moi.station_assignee) {
         const stations = await fetchStations()
@@ -147,6 +158,14 @@ function App() {
   } else if (ecran.scopeId === 'prendre-commande') {
     contenu = (
       <PrendreCommandeScreen onChangerEcran={() => setEcran('selection')} onDeconnexion={() => setConnecte(false)} />
+    )
+  } else if (ecran.scopeId === 'comptoir') {
+    contenu = (
+      <VenteComptoirScreen
+        utilisateur={utilisateur}
+        onChangerEcran={ecranVerrouille ? undefined : () => setEcran('selection')}
+        onDeconnexion={() => setConnecte(false)}
+      />
     )
   } else {
     contenu = (

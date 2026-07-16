@@ -450,9 +450,15 @@ class StaffOrderCreateSerializer(TenantScopedFieldsMixin, serializers.Serializer
     client sur son propre réseau mobile ne peut alors plus atteindre le
     serveur du restaurant, mais le personnel connecté au WiFi local le
     peut toujours (cf. discussion produit sur la résilience réseau).
+
+    `table` optionnelle (§TPE) : une vente comptoir n'est rattachée à
+    aucune table — `Order.table` est déjà nullable au niveau du modèle,
+    seul ce serializer imposait une table jusqu'ici.
     """
 
-    table = serializers.PrimaryKeyRelatedField(queryset=models.RestaurantTable.objects.all())
+    table = serializers.PrimaryKeyRelatedField(
+        queryset=models.RestaurantTable.objects.all(), required=False, allow_null=True
+    )
     items = StaffOrderItemLineSerializer(many=True)
 
 

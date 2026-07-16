@@ -23,7 +23,7 @@ const ONGLETS = [
  * Accès gaté par rôle en amont (`App.jsx`) ET côté backend
  * (`ManagerWriteMixin`) : le masquage du bouton n'est qu'un confort.
  */
-const LIBELLE_ROLE = { admin: 'Administrateur', manager: 'Manager', cuisinier: 'Cuisinier', serveur: 'Serveur' }
+const LIBELLE_ROLE = { admin: 'Administrateur', manager: 'Manager', cuisinier: 'Cuisinier', serveur: 'Serveur', caissier: 'Caissière' }
 
 export default function AdminDashboard({ utilisateur, onChangerEcran, onDeconnexion }) {
   const [ongletId, setOngletId] = useState('rapports')

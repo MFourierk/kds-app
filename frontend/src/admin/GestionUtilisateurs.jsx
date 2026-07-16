@@ -8,9 +8,15 @@ const ROLES = [
   { value: 'manager', label: 'Manager' },
   { value: 'cuisinier', label: 'Cuisinier' },
   { value: 'serveur', label: 'Serveur' },
+  { value: 'caissier', label: 'Caissière' },
 ]
 
-const ROLES_AVEC_PIN = ['cuisinier', 'serveur']
+const ROLES_AVEC_PIN = ['cuisinier', 'serveur', 'caissier']
+// Caissier·ère n'a pas de poste de préparation (§TPE, écran verrouillé par
+// rôle, pas par `station_assignee`, cf. `App.jsx`) — connexion PIN comme
+// cuisinier/serveur, mais sans le champ "Poste assigné" qui n'aurait aucun
+// sens pour elle.
+const ROLES_AVEC_POSTE = ['cuisinier', 'serveur']
 
 const FORM_VIDE = {
   username: '',
@@ -75,7 +81,7 @@ export default function GestionUtilisateurs({ utilisateur }) {
         last_name: form.last_name,
         email: form.email,
         role: form.role,
-        station_assignee: ROLES_AVEC_PIN.includes(form.role) ? form.station_assignee || null : null,
+        station_assignee: ROLES_AVEC_POSTE.includes(form.role) ? form.station_assignee || null : null,
       }
       if (form.password) payload.password = form.password
       if (form.id) await modifier('users', form.id, payload)
@@ -179,7 +185,7 @@ export default function GestionUtilisateurs({ utilisateur }) {
                 </select>
               </Champ>
 
-              {ROLES_AVEC_PIN.includes(form.role) ? (
+              {ROLES_AVEC_POSTE.includes(form.role) && (
                 <Champ label="Poste assigné">
                   <select
                     value={form.station_assignee || ''}
@@ -194,7 +200,8 @@ export default function GestionUtilisateurs({ utilisateur }) {
                     ))}
                   </select>
                 </Champ>
-              ) : (
+              )}
+              {!ROLES_AVEC_PIN.includes(form.role) && (
                 <Champ label={form.id ? 'Nouveau mot de passe (laisser vide pour ne pas changer)' : 'Mot de passe'}>
                   <input
                     type="password"

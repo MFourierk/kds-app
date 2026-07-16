@@ -16,6 +16,7 @@ class Order(TenantScopedModel):
         CLICK_COLLECT = "click_collect", "Click & Collect"
         YANGO = "yango", "Yango Food"
         GLOVO = "glovo", "Glovo"
+        COMPTOIR = "comptoir", "Vente comptoir"
 
     class Statut(models.TextChoices):
         NOUVELLE = "nouvelle", "Nouvelle"

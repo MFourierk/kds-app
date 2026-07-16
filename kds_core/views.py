@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from . import models, serializers, services
-from .permissions import IsAdmin, IsManagerOrAdmin, IsTenantMember
+from .permissions import IsAdmin, IsManagerOrAdmin, IsTenantMember, PeutEncaisser
 
 
 class TenantScopedViewSetMixin:
@@ -309,12 +309,12 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
 
     def get_permissions(self):
         # Encaisser (manipuler de l'argent, marquer payé) reste
-        # manager/admin pour l'instant — un serveur peut en revanche
+        # manager/admin/caissier·ère (§TPE) — un serveur peut en revanche
         # imprimer la facture (montant + détail, sans info de paiement)
         # depuis l'aperçu HTML local côté frontend (`print/imprimer.js`),
         # qui n'appelle même pas cet endpoint.
         if self.action == "encaisser":
-            return [IsAuthenticated(), IsTenantMember(), IsManagerOrAdmin()]
+            return [IsAuthenticated(), IsTenantMember(), PeutEncaisser()]
         # Supprimer une commande = supprimer une transaction (§5.5, demandé
         # après coup) — réservé strictement au rôle admin, pas manager :
         # une commande porte l'historique des ventes/paiements, sa
@@ -406,17 +406,19 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
             data=request.data, context=self.get_serializer_context()
         )
         serializer.is_valid(raise_exception=True)
-        table = serializer.validated_data["table"]
+        # `table` absente = vente comptoir (§TPE, VenteComptoirScreen.jsx) —
+        # pas de table à libérer/occuper, source distincte pour les rapports.
+        table = serializer.validated_data.get("table")
 
         order = models.Order.objects.create(
             tenant=request.user.tenant,
             table=table,
             serveur=request.user,
-            source=models.Order.Source.SALLE,
+            source=models.Order.Source.SALLE if table else models.Order.Source.COMPTOIR,
         )
         services.route_items_to_tickets(order, serializer.validated_data["items"])
 
-        if table.statut == models.RestaurantTable.Statut.LIBRE:
+        if table and table.statut == models.RestaurantTable.Statut.LIBRE:
             table.statut = models.RestaurantTable.Statut.OCCUPEE
             table.save(update_fields=["statut", "updated_at"])
 

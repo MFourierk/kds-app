@@ -47,6 +47,7 @@ class KioskStaffListView(generics.ListAPIView):
             role__in=[
                 models.User.Role.CUISINIER,
                 models.User.Role.SERVEUR,
+                models.User.Role.CAISSIER,
             ],
         )
         station_id = self.request.query_params.get("station")

@@ -37,6 +37,26 @@ class IsManagerOrAdmin(BasePermission):
         )
 
 
+class PeutEncaisser(BasePermission):
+    """
+    Réservé aux rôles qui manipulent réellement de l'argent — admin/manager
+    (comme avant) plus, depuis l'écran TPE (§vente comptoir), le rôle
+    caissier·ère. Volontairement séparée d'`IsManagerOrAdmin` : ce dernier
+    reste utilisé tel quel pour le back-office/les rapports, auxquels une
+    caissière n'a pas accès — seul l'encaissement lui-même s'ouvre à elle.
+    """
+
+    message = "Réservé aux managers, administrateurs et caissier·ères."
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and getattr(user, "role", None) in (User.Role.ADMIN, User.Role.MANAGER, User.Role.CAISSIER)
+        )
+
+
 class IsAdmin(BasePermission):
     """
     Réservé au rôle admin STRICT (pas manager) — utilisé pour des actions

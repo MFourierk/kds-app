@@ -7,6 +7,7 @@ const LIBELLE_ROLE = {
   admin: 'Administrateur',
   cuisinier: 'Cuisinier',
   serveur: 'Serveur',
+  caissier: 'Caissière',
 }
 
 function FormulaireMotDePasse({ onConnecte }) {
