@@ -187,6 +187,49 @@ via le tableau de bord (onglets Menu/Postes/Équipe/Établissement, déjà
 construits) — le paquet ne crée que le tenant et le premier compte admin
 (`manage.py setup_tenant`), volontairement rien de plus.
 
+### Mettre à jour une installation cliente déjà en place
+
+Pas de scp/`docker load`/édition manuelle de `.env` à refaire à chaque fois
+— chaque installation cliente embarque `update.sh` (copié dans le paquet dès
+la première installation), qui va chercher tout seul la dernière version
+publiée sur ce VPS (identifiant/clé API déjà dans son `.env`, aucune
+ressaisie) :
+
+```bash
+# chez le client, dans le dossier d'installation
+./update.sh
+```
+
+Côté opérateur, après un `./scripts/build-client-package.sh` habituel,
+**publier** la nouvelle version pour que les installations existantes la
+voient :
+
+```bash
+./scripts/publier-maj.sh <version>   # ex: 20260716-875450b
+```
+
+Envoie juste l'image (`kds-images-<version>.tar`, pas le paquet complet —
+`install.sh`/le compose sont déjà en place chez le client) vers
+`~/kds-client-packages/` sur ce VPS, et met à jour `LATEST_VERSION`. **Ne
+garde que les 2 dernières versions publiées** (la plus ancienne est
+supprimée automatiquement à chaque nouvelle publication) — pas de vrai
+retour en arrière au-delà de l'avant-dernière version.
+
+Mécanique côté API (`kds_core/licence_views.py`, actif uniquement sur ce
+VPS via `EST_SERVEUR_MAITRE=True`) :
+- `GET /api/licence/derniere-version/?identifiant=...&cle_api=...` — lit
+  `LATEST_VERSION` dans `CLIENT_PACKAGES_DIR`.
+- `GET /api/licence/telecharger/<version>/?identifiant=...&cle_api=...` —
+  sert `kds-images-<version>.tar` en flux direct (pas de config Nginx
+  dédiée à ajouter, tout passe par Django/le pipeline git-deploy déjà en
+  place). Même authentification que le pointage de licence (secret
+  partagé) — pas de nouveau secret à distribuer.
+
+`.env` de ce VPS (maître) a besoin d'une variable en plus :
+```
+CLIENT_PACKAGES_DIR=/home/behanian/kds-client-packages
+```
+
 ## Commandes utiles côté serveur
 
 ```bash

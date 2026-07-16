@@ -25,6 +25,16 @@ crée les comptes cuisinier/serveur (PIN) depuis "Équipe".
 La vérification d'abonnement se fait automatiquement en arrière-plan, dès
 que cette machine a accès à internet — rien à faire de plus.
 
+## Mettre à jour plus tard
+
+Depuis ce même dossier, quand une nouvelle version est disponible :
+```
+./update.sh
+```
+Va chercher automatiquement la dernière version publiée et l'applique —
+aucun fichier à transférer à la main. Nécessite un accès internet au
+moment de la mise à jour (sans, il l'indique simplement et ne fait rien).
+
 ## En cas de problème
 
 ```

@@ -9,4 +9,4 @@ __pycache__/
 *.pyc
 .claude/
 .test-driver/
-dist-client-package/
+/dist-client-package/

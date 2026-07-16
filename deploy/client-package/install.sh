@@ -112,3 +112,6 @@ echo "Compte admin : ${ADMIN_USERNAME}"
 echo
 echo "La vérification de licence se fera automatiquement (toutes les 6h,"
 echo "dès que cette machine aura accès à internet) — rien d'autre à faire."
+echo
+echo "Pour mettre à jour cette installation plus tard : ./update.sh"
+echo "(va chercher automatiquement la dernière version, aucun fichier à transférer à la main)"

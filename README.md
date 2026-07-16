@@ -2021,5 +2021,49 @@ documente que ce qui a changé côté code applicatif pour le rendre possible :
   sur un LAN sans domaine public — y forcer `https://` aurait fait échouer le
   login Django admin). Défaut `True`, comportement du VPS inchangé.
 
+### Mise à jour client — suite directe, demandée après coup
+
+Le paquet d'installation (ci-dessus) résolvait la première installation,
+mais mettre à jour une installation déjà en place restait un enchaînement
+manuel (reconstruire, `scp`, extraire, `docker load`, éditer `.env` à la
+main) — rejeté explicitement : *"il suffit de lancer soit un script de mise
+à jour à partir du client et les modifications se feront automatiquement"*.
+
+- **Deux nouvelles vues sur le serveur maître uniquement**
+  (`kds_core/licence_views.py`, `EST_SERVEUR_MAITRE=True`) :
+  `LicenceDerniereVersionView` (lit un fichier `LATEST_VERSION` texte brut)
+  et `LicenceTelechargerVersionView` (sert l'image Docker correspondante en
+  flux direct via `FileResponse` — pas de config Nginx séparée à ajouter,
+  tout passe par Django/le pipeline git-deploy déjà en place). Même
+  authentification par secret partagé (`identifiant`+`cle_api`) que
+  `LicencePointageView` — pas de nouveau secret à distribuer aux clients.
+  Le nom de fichier reconstruit à partir du paramètre d'URL `version` est
+  strictement validé (`VERSION_RE`, aucun caractère de séparation de
+  chemin autorisé) avant toute lecture disque, pour ne jamais laisser
+  passer une tentative de traversée de répertoire.
+- **`deploy/client-package/update.sh`** (nouveau, embarqué dans le paquet
+  dès la première installation via `build-client-package.sh`) : compare
+  `KDS_VERSION` local à la dernière version publiée, télécharge et charge
+  la nouvelle image si besoin, mets à jour `.env`, relance
+  `docker compose up -d`. Rien à transférer à la main.
+- **`scripts/publier-maj.sh`** (opérateur, après un `build-client-package.sh`
+  habituel) : envoie juste l'image de la nouvelle version vers le VPS et
+  écrit `LATEST_VERSION` — ne garde que les 2 dernières versions publiées
+  (la plus ancienne est supprimée à chaque nouvelle publication).
+
+**Bug réel trouvé en testant `update.sh` en local** (maître+client simulés
+sur la même machine, cf. pattern déjà rencontré en Phase licence) : le
+script utilisait `set -a; source .env; set +a` pour lire
+`LICENCE_MASTER_URL`/`KDS_VERSION`, ce qui **exportait** ces variables dans
+l'environnement du process — `docker compose up -d`, appelé plus loin dans
+le même script après que `.env` ait été mis à jour sur disque par `sed`,
+héritait alors de l'ANCIENNE valeur de `KDS_VERSION` via cet environnement
+exporté (qui prime sur le fichier pour la substitution de variables de
+Compose) plutôt que de relire le fichier fraîchement modifié — la mise à
+jour semblait réussir (`.env` correct sur disque) mais relançait en réalité
+l'ancienne version. Corrigé en retirant `set -a`/`set +a` : un simple
+`source .env` suffit pour l'usage du script lui-même, sans polluer
+l'environnement hérité par les sous-processus.
+
 Se référer au document *Cahier des charges — Application KDS* (sections 4 à 7)
 pour le détail fonctionnel de chaque module.

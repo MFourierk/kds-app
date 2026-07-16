@@ -59,6 +59,14 @@ LICENCE_MASTER_URL = config('LICENCE_MASTER_URL', default='').rstrip('/')
 LICENCE_IDENTIFIANT = config('LICENCE_IDENTIFIANT', default='')
 LICENCE_CLE_API = config('LICENCE_CLE_API', default='')
 
+# §mise à jour client (deploy/client-package/update.sh) — n'a de sens que
+# sur le serveur maître (`EST_SERVEUR_MAITRE=True`) : dossier où
+# `scripts/publier-maj.sh` dépose les images Docker publiées
+# (`kds-images-<version>.tar` + `LATEST_VERSION`), servies en flux direct
+# par `LicenceTelechargerVersionView` (pas de config Nginx dédiée à
+# ajouter). Vide/non pertinent sur une installation cliente.
+CLIENT_PACKAGES_DIR = config('CLIENT_PACKAGES_DIR', default='')
+
 
 # Application definition
 
