@@ -103,6 +103,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'kds_core.middleware.CurrentUserMiddleware',
     'kds_core.middleware.LicenceEnforcementMiddleware',
+    'kds_core.middleware.NoCacheApiMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'

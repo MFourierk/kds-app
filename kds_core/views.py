@@ -224,6 +224,7 @@ class UserViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelVie
     serializer_class = serializers.UserSerializer
 
     _MESSAGE_COMPTE_PROTEGE = "Ce compte administrateur système ne peut pas être modifié depuis l'application."
+    _MESSAGE_HIERARCHIE = "Seul un autre administrateur peut modifier un compte administrateur."
 
     def _est_protege(self, utilisateur):
         # Le superutilisateur Django (`is_superuser=True`, accès `/admin/`)
@@ -234,17 +235,33 @@ class UserViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelVie
         # seulement via `/admin/` par quelqu'un qui y a déjà accès).
         return utilisateur.is_superuser
 
+    def _proteger_hierarchie(self, utilisateur):
+        # Distinct de `_est_protege` : un compte `role=admin` créé
+        # normalement (§installer, `setup_tenant` — pas un superutilisateur
+        # Django) n'était protégé par rien jusqu'ici. Trouvé en usage réel :
+        # un manager voyait "Désactiver"/"Supprimer" actifs sur le compte
+        # administrateur du tenant. Un manager ne doit jamais pouvoir agir
+        # sur un compte admin ; un autre admin le peut (ex: départ d'un
+        # associé).
+        return utilisateur.role == models.User.Role.ADMIN and self.request.user.role != models.User.Role.ADMIN
+
     def update(self, request, *args, **kwargs):
-        if self._est_protege(self.get_object()):
+        cible = self.get_object()
+        if self._est_protege(cible):
             return Response({"detail": self._MESSAGE_COMPTE_PROTEGE}, status=status.HTTP_403_FORBIDDEN)
+        if self._proteger_hierarchie(cible):
+            return Response({"detail": self._MESSAGE_HIERARCHIE}, status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
 
     def partial_update(self, request, *args, **kwargs):
         # Couvre aussi la désactivation (`PATCH {is_active: false}`,
         # `GestionUtilisateurs.jsx::toggleActif`) — pas d'action dédiée à
         # bloquer séparément, c'est une simple mise à jour de champ.
-        if self._est_protege(self.get_object()):
+        cible = self.get_object()
+        if self._est_protege(cible):
             return Response({"detail": self._MESSAGE_COMPTE_PROTEGE}, status=status.HTTP_403_FORBIDDEN)
+        if self._proteger_hierarchie(cible):
+            return Response({"detail": self._MESSAGE_HIERARCHIE}, status=status.HTTP_403_FORBIDDEN)
         return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
@@ -264,6 +281,8 @@ class UserViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelVie
                 {"detail": "Ce compte administrateur système ne peut pas être supprimé."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if self._proteger_hierarchie(cible):
+            return Response({"detail": self._MESSAGE_HIERARCHIE}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=["get"])

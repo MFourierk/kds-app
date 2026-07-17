@@ -51,6 +51,7 @@ class TenantSerializer(serializers.ModelSerializer):
             "couleur_secondaire",
             "telephone",
             "adresse",
+            "url_publique",
             "devise",
             "langue_defaut",
             "seuil_orange_minutes",

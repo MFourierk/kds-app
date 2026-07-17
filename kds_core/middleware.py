@@ -35,6 +35,32 @@ def get_current_user():
     return None
 
 
+class NoCacheApiMiddleware:
+    """
+    `Cache-Control: no-store` sur toutes les réponses `/api/` — DRF ne pose
+    aucun en-tête de cache par défaut, ce qui laisse le navigateur libre
+    d'appliquer sa propre heuristique de cache HTTP sur un GET (pas de
+    ETag/Last-Modified ici, mais certains navigateurs mettent quand même en
+    cache une réponse JSON sans en-tête explicite). Trouvé en usage réel :
+    un plat ajouté via l'écran Menu n'apparaissait pas sur "Prendre
+    commande" ouvert dans le même navigateur — pas un problème de données
+    (le plat existait bien en base), une réponse `/api/menu-items/`
+    manifestement mise en cache localement. Le service worker PWA
+    (`vite-plugin-pwa`) ne pose pas ce problème lui-même (les requêtes API
+    passent volontairement en dehors de son cache Workbox), c'est bien le
+    cache HTTP natif du navigateur, en amont.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if request.path.startswith("/api/"):
+            response["Cache-Control"] = "no-store"
+        return response
+
+
 class CurrentUserMiddleware:
     """Rend l'utilisateur de la requête courante accessible hors du cycle requête/vue (cf. `get_current_user`)."""
 

@@ -2127,5 +2127,50 @@ durcissement que Station/MenuCategory/MenuItem/User en Phase 6 : jusqu'ici
 aucune UI n'écrivait sur ce ViewSet donc ce n'était pas encore un vrai
 risque, ça l'est dès qu'un formulaire existe.
 
+### Retours après un vrai déploiement client (VM)
+
+Quatre points trouvés en usage réel sur l'installation VM (§installer) :
+
+1. **Impression du QR code** — bouton "Imprimer" sur l'aperçu QR
+   (`GestionTables.jsx`), réutilise `ouvrirApercuImpression` déjà en place.
+2. **État des ventes par article/catégorie, imprimable** — `VentesParJourView`
+   étendue (pas un nouvel endpoint, même jeu de commandes que "Ventes du
+   jour") ; nouveau format d'impression A4 (`ouvrirRapportImpression`,
+   distinct du format ticket 80mm existant, mieux adapté à un tableau de
+   plusieurs lignes).
+3. **Hiérarchie de rôle manquante sur les comptes admin** — un compte
+   `role=admin` créé via `setup_tenant` (§installer) n'est **pas** un
+   superutilisateur Django (`is_superuser=False`), donc la protection
+   existante (`UserViewSet._est_protege`, pensée pour LE superutilisateur
+   `/admin/`) ne le couvrait pas : un manager pouvait désactiver/supprimer
+   le compte administrateur du tenant depuis l'écran Équipe. Nouvelle
+   méthode `_proteger_hierarchie` (distincte, pas fusionnée avec
+   `_est_protege`) : un compte `role=admin` n'est modifiable/désactivable/
+   supprimable que par un autre admin, jamais par un manager. Vérifié aussi
+   niveau API (pas que le masquage frontend) : `curl` avec le JWT d'un
+   manager renvoie bien 403 sur `PATCH /api/users/<id_admin>/`.
+4. **QR code encodant `localhost` au lieu de l'adresse réseau** — le lien
+   encodé utilisait `window.location.origin`, l'adresse du navigateur qui a
+   *généré* le QR — correct si généré depuis un poste normal sur le LAN,
+   mais faux si généré depuis le kiosque lui-même (qui charge
+   `http://localhost/`, cf. §installer/kiosque — sans rapport avec
+   l'adresse que doit composer le téléphone d'un client). Nouveau champ
+   `Tenant.url_publique` (onglet Établissement) : si renseigné, prime sur
+   `window.location.origin` pour la génération de QR — fixe, indépendant de
+   l'appareil utilisé.
+
+Cinquième point, trouvé en creusant un "menu vide sans erreur" sur
+"Prendre commande" alors que des plats existaient bien en base : DRF ne
+pose aucun en-tête de cache par défaut sur ses réponses JSON, laissant le
+navigateur libre d'appliquer sa propre heuristique de cache HTTP sur un
+`GET` — un plat ajouté via l'écran Menu pouvait ne jamais apparaître
+ailleurs dans la même session navigateur tant que la réponse
+`/api/menu-items/` restait servie depuis le cache local. Nouveau
+`NoCacheApiMiddleware` (`kds_core/middleware.py`) : `Cache-Control:
+no-store` sur toute réponse `/api/*`, quel que soit le statut. Le service
+worker PWA n'était pas en cause (les requêtes API sont déjà explicitement
+exclues de son cache Workbox) — c'est le cache HTTP natif du navigateur,
+en amont, jamais concerné jusqu'ici.
+
 Se référer au document *Cahier des charges — Application KDS* (sections 4 à 7)
 pour le détail fonctionnel de chaque module.

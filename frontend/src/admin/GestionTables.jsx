@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { creer, lister, modifier, supprimer } from './apiAdmin'
-import { apiFetch } from '../api'
+import { apiFetch, fetchTenant } from '../api'
 import { echapper, ouvrirApercuImpression } from '../print/imprimer'
 import { Badge, BoutonLien, BoutonPrimaire, BoutonSecondaire, Carte, Champ, classeInput, Ligne, Table } from './ui'
 
@@ -25,9 +25,14 @@ const LIBELLE_STATUT = {
  * QR code généré entièrement côté navigateur (`qrcode`, aucun appel
  * réseau externe — cohérent avec le reste du projet pensé pour
  * fonctionner hors ligne) à partir de `qr_code_token` (déjà présent sur
- * chaque table, généré par le backend) : `${origine}/t/<token>/`, la même
- * origine que la page actuelle, pas une URL codée en dur — fonctionne
- * aussi bien sur le VPS que sur une installation cliente locale.
+ * chaque table, généré par le backend) : `${origine}/t/<token>/`.
+ *
+ * `origine` = `Tenant.url_publique` si renseignée (onglet Établissement),
+ * sinon repli sur l'origine de la page actuelle. Trouvé en usage réel :
+ * un QR généré depuis le kiosque lui-même encodait `http://localhost/`
+ * (l'adresse que CE navigateur charge, cf. §installer) — inutilisable
+ * pour un client qui scanne depuis son propre téléphone. `url_publique`
+ * est fixe, indépendante de l'appareil qui génère le QR.
  */
 export default function GestionTables() {
   const [tables, setTables] = useState(null)
@@ -36,6 +41,7 @@ export default function GestionTables() {
   const [enCours, setEnCours] = useState(false)
   const [qrOuvert, setQrOuvert] = useState(null) // table ou null
   const [qrDataUrl, setQrDataUrl] = useState('')
+  const [origineQr, setOrigineQr] = useState(window.location.origin)
 
   function recharger() {
     lister(RESSOURCE)
@@ -44,15 +50,22 @@ export default function GestionTables() {
   }
 
   useEffect(recharger, [])
+  useEffect(() => {
+    fetchTenant()
+      .then((t) => {
+        if (t.url_publique) setOrigineQr(t.url_publique.replace(/\/$/, ''))
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!qrOuvert) {
       setQrDataUrl('')
       return
     }
-    const url = `${window.location.origin}/t/${qrOuvert.qr_code_token}/`
+    const url = `${origineQr}/t/${qrOuvert.qr_code_token}/`
     QRCode.toDataURL(url, { width: 320, margin: 2 }).then(setQrDataUrl)
-  }, [qrOuvert])
+  }, [qrOuvert, origineQr])
 
   async function enregistrer(event) {
     event.preventDefault()

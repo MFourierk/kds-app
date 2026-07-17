@@ -35,6 +35,17 @@ class Tenant(UUIDModel, TimeStampedModel):
     telephone = models.CharField(max_length=40, blank=True)
     adresse = models.CharField(max_length=255, blank=True)
 
+    url_publique = models.URLField(
+        blank=True,
+        help_text=(
+            "Adresse utilisée pour générer les QR codes clients (ex: http://192.168.1.6 sur "
+            "une installation locale). Laisser vide pour retomber sur l'adresse du navigateur "
+            "ayant généré le QR — fragile si générée depuis un appareil qui n'a pas la même "
+            "adresse que celle utilisée par les clients (ex: le kiosque lui-même, qui charge "
+            "souvent http://localhost/ plutôt que l'IP réseau de la machine)."
+        ),
+    )
+
     devise = models.CharField(max_length=3, choices=Devise.choices, default=Devise.XOF)
     langue_defaut = models.CharField(max_length=2, choices=Langue.choices, default=Langue.FR)
 

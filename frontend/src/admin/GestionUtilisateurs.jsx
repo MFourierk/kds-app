@@ -288,6 +288,16 @@ export default function GestionUtilisateurs({ utilisateur }) {
                   <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                     🔒 Compte système — protégé
                   </span>
+                ) : u.role === 'admin' && utilisateur?.role !== 'admin' ? (
+                  // Un manager ne doit jamais pouvoir désactiver/supprimer un
+                  // compte administrateur (§Équipe, trouvé en usage réel :
+                  // un compte admin créé via l'installeur, pas superutilisateur
+                  // Django, restait modifiable par un manager) — même
+                  // protection que ci-dessus, backend fait foi (`UserViewSet.
+                  // _proteger_hierarchie`), ce masquage n'est qu'un confort.
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    🔒 Compte administrateur
+                  </span>
                 ) : (
                   <>
                     <BoutonLien

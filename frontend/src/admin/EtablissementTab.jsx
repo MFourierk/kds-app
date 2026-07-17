@@ -26,7 +26,12 @@ export default function EtablissementTab() {
     fetchTenant()
       .then((t) => {
         setTenant(t)
-        setForm({ nom_etablissement: t.nom_etablissement, telephone: t.telephone, adresse: t.adresse })
+        setForm({
+          nom_etablissement: t.nom_etablissement,
+          telephone: t.telephone,
+          adresse: t.adresse,
+          url_publique: t.url_publique,
+        })
       })
       .catch((e) => setErreur(e.message))
   }
@@ -45,6 +50,7 @@ export default function EtablissementTab() {
         corps.append('nom_etablissement', form.nom_etablissement)
         corps.append('telephone', form.telephone)
         corps.append('adresse', form.adresse)
+        corps.append('url_publique', form.url_publique)
         corps.append('logo', logoFile)
       } else {
         corps = form
@@ -114,6 +120,21 @@ export default function EtablissementTab() {
               />
             </Champ>
           </div>
+
+          <Champ label="Adresse du serveur (pour les QR codes)">
+            <input
+              value={form.url_publique}
+              onChange={(e) => setForm({ ...form, url_publique: e.target.value })}
+              className={classeInput}
+              placeholder="http://192.168.1.6"
+            />
+          </Champ>
+          <p className="text-xs text-gray-400">
+            Utilisée pour générer les QR codes des tables (onglet Tables) — l'adresse à laquelle les
+            clients doivent pouvoir joindre cette installation sur le réseau local. Laisser vide pour
+            utiliser automatiquement l'adresse de la page actuelle (peut être incorrect si généré
+            depuis le kiosque, cf. DEPLOY.md).
+          </p>
 
           <p className="text-xs text-gray-400">
             Logo, nom, adresse et téléphone apparaissent en en-tête de la facture et du reçu de caisse.
