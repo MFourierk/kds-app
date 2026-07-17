@@ -9,16 +9,25 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 const TOKEN_STORAGE_KEY = 'kds_tokens'
 
+// `sessionStorage`, pas `localStorage` : trouvé en usage réel sur la VM
+// cliente — un redémarrage complet rouvrait directement la session Manager
+// de la veille sans jamais redemander le mot de passe (le kiosque relance
+// le navigateur sur une machine partagée, comptoir accessible à tous).
+// `localStorage` survit indéfiniment aux redémarrages ; `sessionStorage`
+// est propre à l'onglet/processus navigateur et disparaît à sa fermeture —
+// une vraie coupure (VM éteinte, navigateur relancé) revient donc toujours
+// à l'écran de connexion, tout en laissant un simple rechargement de page
+// en cours de service (F5, ex: après une erreur JS) garder la session.
 export function getTokens() {
-  const raw = localStorage.getItem(TOKEN_STORAGE_KEY)
+  const raw = sessionStorage.getItem(TOKEN_STORAGE_KEY)
   return raw ? JSON.parse(raw) : null
 }
 
 export function setTokens(tokens) {
   if (tokens) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens))
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens))
   } else {
-    localStorage.removeItem(TOKEN_STORAGE_KEY)
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY)
   }
 }
 
