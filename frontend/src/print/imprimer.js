@@ -154,33 +154,94 @@ ${autoriserImpression ? '<button class="bouton-imprimer" onclick="window.print()
   return ouvrirFenetreDepuisHtml(html, 'width=420,height=720')
 }
 
-const STYLE_RAPPORT = `
-  @page { margin: 15mm; }
+/**
+ * `--primaire`/`--secondaire` : les couleurs de marque du tenant
+ * (`Tenant.couleur_primaire`/`couleur_secondaire`, déjà utilisées pour
+ * thémer le menu QR client, cf. `ClientApp.jsx`) plutôt qu'une palette
+ * fixe — un rapport imprimé porte la même identité visuelle que le menu
+ * que voient les clients, pas une charte isolée propre à l'impression.
+ * Mêmes valeurs par défaut que `ClientApp.jsx` si le tenant n'a rien
+ * configuré.
+ */
+function STYLE_RAPPORT(primaire, secondaire) {
+  return `
+  @page { margin: 14mm; }
   * { box-sizing: border-box; }
+  :root { --primaire: ${primaire}; --secondaire: ${secondaire}; }
   body {
     font-family: system-ui, sans-serif;
     font-size: 13px;
-    color: #111;
-    padding: 24px;
+    color: #1f2937;
+    padding: 4px;
     max-width: 800px;
     margin: 0 auto;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .sous-titre { color: #666; margin-bottom: 20px; }
-  h2 { font-size: 14px; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; color: #444; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #e0e0e0; }
-  th { font-size: 11px; text-transform: uppercase; color: #666; border-bottom: 2px solid #111; }
-  td:last-child, th:last-child, td:nth-last-child(2), th:nth-last-child(2) { text-align: right; }
-  .total { font-weight: bold; font-size: 15px; }
+
+  .entete-rapport { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+  .logo-rapport { height: 52px; width: 52px; object-fit: contain; border-radius: 10px; }
+  .coordonnees-rapport { text-align: right; }
+  .nom-etablissement-rapport { font-size: 18px; font-weight: 800; color: var(--primaire); letter-spacing: -0.01em; }
+  .ligne-coord { font-size: 11px; color: #6b7280; margin-top: 1px; }
+  .separateur-entete { height: 3px; background: linear-gradient(to right, var(--primaire), var(--secondaire)); margin: 14px 0 22px; border-radius: 2px; }
+
+  .titre-rapport-bloc { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 22px; }
+  h1.titre-rapport { font-size: 21px; margin: 0 0 3px; color: #111827; }
+  .sous-titre-rapport { color: #6b7280; font-size: 12.5px; }
+  .badge-rapport {
+    flex-shrink: 0;
+    display: inline-block;
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: var(--secondaire);
+    color: var(--primaire);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .cartes-info { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .carte-info { border: 1px solid #e5e7eb; border-radius: 10px; padding: 13px 16px; background: #fafafa; }
+  .carte-info-titre { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #9ca3af; margin-bottom: 9px; }
+  .ligne-info { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 3px 0; }
+  .ligne-info span:first-child { color: #6b7280; }
+  .ligne-info span:last-child { font-weight: 600; color: #111827; font-variant-numeric: tabular-nums; }
+  .ligne-info.accent span:last-child { color: var(--primaire); font-weight: 800; font-size: 15px; }
+
+  h2.section-rapport { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin: 22px 0 8px; font-weight: 700; }
+
+  table.table-rapport { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 12.5px; }
+  table.table-rapport thead tr { background: var(--primaire); }
+  table.table-rapport th { color: var(--secondaire); text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; padding: 9px 10px; text-align: left; font-weight: 700; }
+  table.table-rapport th:first-child { border-radius: 6px 0 0 0; }
+  table.table-rapport th:last-child { border-radius: 0 6px 0 0; }
+  table.table-rapport td { padding: 8px 10px; border-bottom: 1px solid #eee; }
+  table.table-rapport tbody tr:nth-child(even) { background: #fafafa; }
+  table.table-rapport td:last-child, table.table-rapport th:last-child,
+  table.table-rapport td:nth-last-child(2), table.table-rapport th:nth-last-child(2) {
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  tr.ligne-total td { border-top: 2px solid var(--primaire); border-bottom: none; font-weight: 800; background: #f8fafc; color: var(--primaire); font-size: 13.5px; padding-top: 10px; padding-bottom: 10px; }
+
+  .legende-rapport { margin-top: 18px; padding: 11px 15px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; font-size: 10.5px; color: #78716c; line-height: 1.6; }
+
+  .signatures-rapport { display: flex; justify-content: space-between; margin-top: 52px; gap: 40px; }
+  .signature-bloc { flex: 1; text-align: center; }
+  .ligne-signature { border-top: 1px solid #9ca3af; margin-bottom: 6px; }
+  .signature-legende { font-size: 10.5px; color: #9ca3af; }
+
+  .pied-rapport { margin-top: 26px; padding: 10px 16px; background: var(--primaire); color: #fff; font-size: 10px; display: flex; justify-content: space-between; gap: 12px; border-radius: 8px; }
+  .pied-rapport span:last-child { opacity: 0.75; }
+
   .bouton-imprimer {
     font-family: system-ui, sans-serif;
     display: block;
-    margin-top: 12px;
+    margin-top: 16px;
     padding: 10px 20px;
     font-size: 14px;
     font-weight: 600;
-    background: #0f172a;
+    background: var(--primaire);
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -190,18 +251,102 @@ const STYLE_RAPPORT = `
     .bouton-imprimer { display: none; }
   }
 `
+}
 
-/** Rapport imprimable (§rapports, A4 — pas le format ticket 80mm des reçus/factures). */
-export function ouvrirRapportImpression(titre, corpsHtml) {
+function construireEnTeteRapport(tenant) {
+  if (!tenant) return ''
+  return `
+    <div class="entete-rapport">
+      ${tenant.logo ? `<img src="${echapper(tenant.logo)}" alt="" class="logo-rapport" />` : '<div></div>'}
+      <div class="coordonnees-rapport">
+        <div class="nom-etablissement-rapport">${echapper(tenant.nom_etablissement)}</div>
+        ${tenant.adresse ? `<div class="ligne-coord">${echapper(tenant.adresse)}</div>` : ''}
+        ${tenant.telephone ? `<div class="ligne-coord">Tél : ${echapper(tenant.telephone)}</div>` : ''}
+      </div>
+    </div>
+    <div class="separateur-entete"></div>
+  `
+}
+
+function construirePiedRapport(tenant, piedDroite) {
+  if (!tenant) return ''
+  const gauche = [tenant.nom_etablissement, tenant.adresse].filter(Boolean).join(' · ')
+  return `
+    <div class="pied-rapport">
+      <span>${echapper(gauche)}</span>
+      ${piedDroite ? `<span>${echapper(piedDroite)}</span>` : ''}
+    </div>
+  `
+}
+
+/**
+ * Bloc titre + pastille (ex: nombre de catégories/articles couverts) —
+ * commun à tous les rapports imprimables, pas seulement l'état des
+ * ventes.
+ */
+export function construireTitreRapport(titre, sousTitre, badge) {
+  return `
+    <div class="titre-rapport-bloc">
+      <div>
+        <h1 class="titre-rapport">${echapper(titre)}</h1>
+        ${sousTitre ? `<p class="sous-titre-rapport">${echapper(sousTitre)}</p>` : ''}
+      </div>
+      ${badge ? `<span class="badge-rapport">${echapper(badge)}</span>` : ''}
+    </div>
+  `
+}
+
+/** `lignes`: [{ label, valeur (déjà formatée, pas échappée — même convention que `formatPrix` ailleurs dans ce module), accent? }]. */
+export function construireCarteInfo(titre, lignes) {
+  return `
+    <div class="carte-info">
+      <div class="carte-info-titre">${echapper(titre)}</div>
+      ${lignes
+        .map(
+          (l) =>
+            `<div class="ligne-info${l.accent ? ' accent' : ''}"><span>${echapper(l.label)}</span><span>${l.valeur}</span></div>`
+        )
+        .join('')}
+    </div>
+  `
+}
+
+export function construireSignaturesRapport(gauche, droite) {
+  return `
+    <div class="signatures-rapport">
+      <div class="signature-bloc">
+        <div class="ligne-signature"></div>
+        <div class="signature-legende">${echapper(gauche)}</div>
+      </div>
+      <div class="signature-bloc">
+        <div class="ligne-signature"></div>
+        <div class="signature-legende">${echapper(droite)}</div>
+      </div>
+    </div>
+  `
+}
+
+/**
+ * Rapport imprimable (§rapports, A4 — pas le format ticket 80mm des
+ * reçus/factures). En-tête/pied de page construits ici, communs à tous
+ * les rapports — `corpsHtml` ne porte que le contenu propre au rapport
+ * (titre, cartes, tableaux, légende, signatures via les helpers
+ * ci-dessus).
+ */
+export function ouvrirRapportImpression(titre, corpsHtml, { tenant, piedDroite } = {}) {
+  const primaire = tenant?.couleur_primaire || '#1B2431'
+  const secondaire = tenant?.couleur_secondaire || '#C9A24B'
   const html = `<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8" />
 <title>${echapper(titre)}</title>
-<style>${STYLE_RAPPORT}</style>
+<style>${STYLE_RAPPORT(primaire, secondaire)}</style>
 </head>
 <body>
+${construireEnTeteRapport(tenant)}
 ${corpsHtml}
+${construirePiedRapport(tenant, piedDroite)}
 <button class="bouton-imprimer" onclick="window.print()">🖨️ Imprimer</button>
 </body>
 </html>`
