@@ -186,7 +186,18 @@ class MenuItemViewSet(ProtectedDeleteMixin, ManagerWriteMixin, TenantScopedViewS
     serializer_class = serializers.MenuItemSerializer
 
 
-class RestaurantTableViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
+class RestaurantTableViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelViewSet):
+    """
+    Lecture ouverte à tout membre du tenant (nécessaire pour
+    `PrendreCommandeScreen`/le routage table→commande), écriture
+    (créer/modifier/supprimer une table, §gestion des tables) réservée
+    manager/admin — même durcissement que Station/MenuCategory/MenuItem/
+    User (Phase 6), appliqué ici en même temps que le premier écran de
+    gestion (`GestionTables.jsx`) : jusqu'ici aucune UI n'écrivait sur ce
+    ViewSet, ce n'était pas encore un vrai risque, ça l'est dès qu'un
+    formulaire existe.
+    """
+
     queryset = models.RestaurantTable.objects.all()
     serializer_class = serializers.RestaurantTableSerializer
 

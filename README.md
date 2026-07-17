@@ -2065,5 +2065,67 @@ l'ancienne version. Corrigé en retirant `set -a`/`set +a` : un simple
 `source .env` suffit pour l'usage du script lui-même, sans polluer
 l'environnement hérité par les sous-processus.
 
+### Écran TPE (vente comptoir) et rôle Caissière
+
+Le gérant a parfois des clients directement au comptoir (pas assis à une
+table) — besoin d'un écran de vente rapide type point de vente (grille de
+produits, panier, encaissement immédiat). L'écran Caisse du gérant gagne un
+onglet **"Vente comptoir"** à côté de "Commandes de table" (inchangé) ;
+l'écran Facture du serveur n'est pas touché.
+
+- **Réutilise `prendre_commande` + `encaisser`** plutôt qu'un nouvel
+  endpoint — `StaffOrderCreateSerializer.table` devient optionnelle
+  (`Order.table` était déjà nullable au niveau du modèle, seul le
+  serializer imposait une table) : une vente comptoir crée une commande
+  sans table (`source='comptoir'`, nouveau choix) puis l'encaisse dans la
+  foulée, côté écran.
+- **Nouvelle permission `PeutEncaisser`** (admin/manager/caissier·ère),
+  distincte d'`IsManagerOrAdmin` qui reste inchangée pour le back-office/
+  les rapports — la caissière n'y a pas accès, seul l'encaissement s'ouvre
+  à elle.
+- **`PaiementPicker.jsx`** (extrait de `CaisseScreen.jsx`) : le choix du
+  mode de paiement/montant reçu/monnaie était déjà une UI non triviale
+  (4 catégories, 3 opérateurs mobile money) — extrait en composant partagé
+  plutôt que dupliqué une seconde fois pour le nouvel écran.
+- **Rôle `caissier`** (`User.Role`, libellé "Caissière") : un seul écran
+  par défaut, verrouillé — même mécanique que le verrouillage par poste
+  cuisine (`station_assignee`) dans `App.jsx`, mais basée sur le rôle
+  directement, puisqu'une caissière n'a pas de poste de préparation.
+  `GestionUtilisateurs.jsx` : connexion PIN comme cuisinier/serveur, mais
+  sans le champ "Poste assigné" (nouvelle distinction `ROLES_AVEC_PIN` vs
+  `ROLES_AVEC_POSTE`, jusqu'ici les deux mêmes rôles se confondaient).
+
+Testé de bout en bout (Playwright) : bascule d'onglet manager, régression
+zéro sur l'écran serveur (0 sélecteur d'onglets), connexion `caissiere1`
+(PIN) → atterrit directement sur l'écran TPE sans sélecteur ni "Changer
+d'écran", vente complète (recherche, panier avec fusion de quantité,
+paiement, impression) vérifiée en base (`table=None`, `source='comptoir'`,
+`statut_paiement='payee'`) et sur l'aperçu du reçu (pas de ligne "Table").
+
+### Gestion des tables — lacune trouvée en testant l'installeur client
+
+En testant une vraie installation cliente fraîche (`setup_tenant`, aucune
+donnée de démo), l'écran "Prendre commande" s'affichait vide sans message
+— cause : **aucun écran de gestion des tables n'a jamais existé** dans le
+tableau de bord (contrairement à Menu/Postes/Équipe), les tables n'étaient
+jusqu'ici créées que par `seed_demo` (fixe) ou `/admin/` Django. Ce même
+manque bloque aussi la génération des QR codes clients.
+
+Nouvel onglet **"Tables"** (`GestionTables.jsx`, même pattern CRUD que
+`GestionPostes.jsx`) : créer/modifier/supprimer une table, bouton
+"Libérer" (réutilise `RestaurantTableViewSet.liberer`, jamais exposé côté
+frontend jusqu'ici), et génération de QR code **entièrement côté
+navigateur** (`qrcode`, nouvelle dépendance npm, aucun appel réseau
+externe — cohérent avec le reste du projet pensé pour fonctionner hors
+ligne) à partir de `${window.location.origin}/t/<qr_code_token>/` — pas
+d'URL codée en dur, fonctionne aussi bien sur le VPS que sur une
+installation cliente locale à IP variable.
+
+Au passage, `RestaurantTableViewSet` gagne `ManagerWriteMixin` (lecture
+ouverte à tout membre du tenant, écriture réservée manager/admin) — même
+durcissement que Station/MenuCategory/MenuItem/User en Phase 6 : jusqu'ici
+aucune UI n'écrivait sur ce ViewSet donc ce n'était pas encore un vrai
+risque, ça l'est dès qu'un formulaire existe.
+
 Se référer au document *Cahier des charges — Application KDS* (sections 4 à 7)
 pour le détail fonctionnel de chaque module.
