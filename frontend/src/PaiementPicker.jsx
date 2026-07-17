@@ -1,3 +1,4 @@
+import ClavierNumerique from './ClavierNumerique'
 import { formatPrix } from './client/formatPrix'
 import { LIBELLE_MODE_PAIEMENT } from './print/imprimer'
 
@@ -76,12 +77,14 @@ export default function PaiementPicker({
           <label className="block text-xs text-slate-400">
             Montant reçu
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               value={montantRecu}
               onChange={(e) => setMontantRecu(e.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100"
             />
           </label>
+          <ClavierNumerique valeur={montantRecu} onChange={setMontantRecu} autoriserDecimales />
           <div className="flex justify-between text-sm text-slate-300">
             <span>Monnaie à rendre</span>
             <span className="font-semibold">{formatPrix(monnaie, 'XOF')}</span>

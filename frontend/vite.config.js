@@ -18,6 +18,12 @@ export default defineConfig({
     // périmées sans qu'on contrôle quand.
     VitePWA({
       registerType: 'autoUpdate',
+      // Enregistrement manuel (`main.jsx`, `virtual:pwa-register`) plutôt
+      // que le script auto-injecté par défaut : nécessaire pour pouvoir
+      // relancer nous-mêmes `registration.update()` à intervalle régulier
+      // (§PWA, kiosque qui reste ouvert indéfiniment sans jamais
+      // renaviguer, cf. commentaire dans `main.jsx`).
+      injectRegister: false,
       // Sans ça, un service worker déjà installé chez un utilisateur
       // continue de servir l'ancien app shell en cache tant que tous ses
       // onglets ne sont pas fermés — un `git push vps` peut donc être

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import ClavierNumerique from '../ClavierNumerique'
 import { creer, lister, modifier, supprimer } from './apiAdmin'
 import { formatPrix } from '../client/formatPrix'
 import { Badge, BoutonLien, BoutonPrimaire, BoutonSecondaire, Carte, Champ, classeInput, Ligne, Table } from './ui'
@@ -256,15 +257,23 @@ function SectionPlats({ plats, categories, stations, recharger, setErreur }) {
               </Champ>
             </div>
             <div className="flex flex-wrap gap-4">
-              <Champ label="Prix (XOF)" className="w-32">
+              <Champ label="Prix (XOF)" className="w-40">
                 <input
                   required
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   value={form.prix}
                   onChange={(e) => setForm({ ...form, prix: e.target.value })}
                   className={classeInput}
                 />
+                <div className="mt-1.5">
+                  <ClavierNumerique
+                    valeur={form.prix}
+                    onChange={(v) => setForm({ ...form, prix: v })}
+                    autoriserDecimales
+                    sombre={false}
+                  />
+                </div>
               </Champ>
               <Champ label="Temps de préparation (min)" className="w-40">
                 <input
