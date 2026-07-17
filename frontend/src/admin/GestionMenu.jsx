@@ -328,6 +328,17 @@ function SectionPlats({ plats, categories, stations, recharger, setErreur }) {
                   {p.statut === 'disponible' ? 'Disponible' : "Rupture (86'd)"}
                 </Badge>
               </button>
+              {!p.is_active && (
+                // `is_active` (distinct de `statut`) n'a aucune bascule dans cet
+                // écran — un plat ne devrait jamais l'avoir à `false` en usage
+                // normal (cf. serializers.py). S'affiche uniquement si trouvé
+                // ainsi en base (ex: anciennes données à corriger), pour ne pas
+                // laisser croire "Disponible" alors qu'il reste invisible côté
+                // client/Prendre commande.
+                <span className="ml-1.5 inline-block">
+                  <Badge tone="red">Masqué (is_active=false)</Badge>
+                </span>
+              )}
             </td>
             <td className="px-4 py-3 text-right whitespace-nowrap">
               <BoutonLien tone="sky" className="mr-4" onClick={() => setForm(p)}>

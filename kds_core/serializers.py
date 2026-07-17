@@ -136,7 +136,19 @@ class MenuItemSerializer(TenantScopedSerializer):
             "modifiers",
             "is_active",
         ]
-        read_only_fields = ["id", "tenant"]
+        # `is_active` en lecture seule : aucun écran n'expose de bascule pour
+        # ce champ sur un plat (contrairement à Utilisateur/Poste, cf.
+        # GestionUtilisateurs.jsx/GestionPostes.jsx qui l'écrivent en JSON) —
+        # `statut` (disponible/rupture) est le seul levier de disponibilité
+        # côté admin. Le rendre non-modifiable via l'API évite aussi un bug
+        # DRF réel trouvé en usage client : `BooleanField.get_value()`
+        # traite tout payload multipart/form-data (upload de photo à la
+        # création d'un plat) selon la sémantique "case à cocher HTML" —
+        # un champ absent y vaut explicitement `False`, pas "non fourni",
+        # court-circuitant le `default=True` du modèle. Un plat créé avec
+        # photo se retrouvait donc invisible partout (`is_active=False`)
+        # sans qu'aucun code n'ait jamais voulu le désactiver.
+        read_only_fields = ["id", "tenant", "is_active"]
 
 
 class RestaurantTableSerializer(TenantScopedSerializer):
