@@ -22,7 +22,7 @@ export const LIBELLE_MODE_PAIEMENT = {
   autre: 'Autre',
 }
 
-function echapper(texte) {
+export function echapper(texte) {
   const div = document.createElement('div')
   div.textContent = texte ?? ''
   return div.innerHTML
@@ -114,6 +114,29 @@ const STYLE_TICKET = `
  * du navigateur (Ctrl+P) : ce n'est pas une vraie barrière de sécurité,
  * juste le geste normal retiré de l'écran.
  */
+/**
+ * Navigation directe vers une Blob URL plutôt que `window.open('') +
+ * document.write` : ce dernier ouvre d'abord une fenêtre sur
+ * "about:blank", puis écrit le contenu par-dessus — un navigateur qui
+ * termine sa propre navigation vers "about:blank" *après* ce write
+ * écrase silencieusement le contenu (fenêtre blanche, pas d'erreur JS).
+ * La Blob URL est un document déjà complet dès l'ouverture : une seule
+ * navigation, pas de course. Partagée entre `ouvrirApercuImpression`
+ * (ticket/facture, 80mm) et `ouvrirRapportImpression` (rapport, A4) —
+ * même mécanique, juste des dimensions de fenêtre différentes.
+ */
+function ouvrirFenetreDepuisHtml(html, dimensions) {
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+  const fenetre = window.open(url, '_blank', dimensions)
+  if (!fenetre) {
+    URL.revokeObjectURL(url)
+    return false
+  }
+  fenetre.focus()
+  setTimeout(() => URL.revokeObjectURL(url), 30000)
+  return true
+}
+
 export function ouvrirApercuImpression(titre, corpsHtml, { autoriserImpression = true } = {}) {
   const html = `<!doctype html>
 <html lang="fr">
@@ -128,22 +151,62 @@ ${autoriserImpression ? '<button class="bouton-imprimer" onclick="window.print()
 </body>
 </html>`
 
-  // Navigation directe vers une Blob URL plutôt que `window.open('') +
-  // document.write` : ce dernier ouvre d'abord une fenêtre sur
-  // "about:blank", puis écrit le contenu par-dessus — un navigateur qui
-  // termine sa propre navigation vers "about:blank" *après* ce write
-  // écrase silencieusement le contenu (fenêtre blanche, pas d'erreur
-  // JS). La Blob URL est un document déjà complet dès l'ouverture : une
-  // seule navigation, pas de course.
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-  const fenetre = window.open(url, '_blank', 'width=420,height=720')
-  if (!fenetre) {
-    URL.revokeObjectURL(url)
-    return false
+  return ouvrirFenetreDepuisHtml(html, 'width=420,height=720')
+}
+
+const STYLE_RAPPORT = `
+  @page { margin: 15mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    font-size: 13px;
+    color: #111;
+    padding: 24px;
+    max-width: 800px;
+    margin: 0 auto;
   }
-  fenetre.focus()
-  setTimeout(() => URL.revokeObjectURL(url), 30000)
-  return true
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sous-titre { color: #666; margin-bottom: 20px; }
+  h2 { font-size: 14px; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; color: #444; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+  th { font-size: 11px; text-transform: uppercase; color: #666; border-bottom: 2px solid #111; }
+  td:last-child, th:last-child, td:nth-last-child(2), th:nth-last-child(2) { text-align: right; }
+  .total { font-weight: bold; font-size: 15px; }
+  .bouton-imprimer {
+    font-family: system-ui, sans-serif;
+    display: block;
+    margin-top: 12px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    background: #0f172a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  @media print {
+    .bouton-imprimer { display: none; }
+  }
+`
+
+/** Rapport imprimable (§rapports, A4 — pas le format ticket 80mm des reçus/factures). */
+export function ouvrirRapportImpression(titre, corpsHtml) {
+  const html = `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>${echapper(titre)}</title>
+<style>${STYLE_RAPPORT}</style>
+</head>
+<body>
+${corpsHtml}
+<button class="bouton-imprimer" onclick="window.print()">🖨️ Imprimer</button>
+</body>
+</html>`
+
+  return ouvrirFenetreDepuisHtml(html, 'width=900,height=800')
 }
 
 /** Ticket cuisine — table, plats + modificateurs/commentaire, rush. */

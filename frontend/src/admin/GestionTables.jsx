@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { creer, lister, modifier, supprimer } from './apiAdmin'
 import { apiFetch } from '../api'
+import { echapper, ouvrirApercuImpression } from '../print/imprimer'
 import { Badge, BoutonLien, BoutonPrimaire, BoutonSecondaire, Carte, Champ, classeInput, Ligne, Table } from './ui'
 
 const RESSOURCE = 'tables'
@@ -80,6 +81,20 @@ export default function GestionTables() {
     }
   }
 
+  function imprimerQr() {
+    // Réutilise l'aperçu HTML ticket déjà en place (§5.5) — même dialogue
+    // d'impression natif (n'importe quelle imprimante installée sur le
+    // poste), pas de nouveau mécanisme à construire pour un simple QR code.
+    const corpsHtml = `
+      <div class="centre gras titre">Table ${echapper(qrOuvert.numero)}</div>
+      <div class="centre" style="margin-top:12px;">
+        <img src="${qrDataUrl}" alt="" style="width:200px;height:200px;" />
+      </div>
+      <div class="centre petit" style="margin-top:8px;">Scannez pour voir le menu et commander</div>
+    `
+    ouvrirApercuImpression(`QR code — Table ${qrOuvert.numero}`, corpsHtml)
+  }
+
   async function supprimerTable(table) {
     setErreur('')
     try {
@@ -132,13 +147,18 @@ export default function GestionTables() {
             )}
             <div className="flex gap-2">
               {qrDataUrl && (
-                <a
-                  href={qrDataUrl}
-                  download={`qr-table-${qrOuvert.numero}.png`}
-                  className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
-                >
-                  Télécharger
-                </a>
+                <>
+                  <a
+                    href={qrDataUrl}
+                    download={`qr-table-${qrOuvert.numero}.png`}
+                    className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+                  >
+                    Télécharger
+                  </a>
+                  <BoutonPrimaire type="button" onClick={imprimerQr}>
+                    🖨️ Imprimer
+                  </BoutonPrimaire>
+                </>
               )}
               <BoutonSecondaire type="button" onClick={() => setQrOuvert(null)}>
                 Fermer

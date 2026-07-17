@@ -258,11 +258,55 @@ class VentesParJourView(BaseStatsView):
                 }
             )
 
+        # Ventes par article/catégorie (§5.5, demandé après coup — "l'état
+        # des ventes par article/catégorie à une date donnée", imprimable
+        # depuis le tableau de bord). Basé sur les MÊMES commandes déjà
+        # filtrées ci-dessus (même date, mêmes commandes payées) — pas un
+        # nouvel endpoint séparé, une deuxième vue du même jeu de données.
+        # `plat__prix` (pas un prix figé par ligne, cf. `OrderItem` — le
+        # projet n'a jamais stocké de prix historique par ligne, seule
+        # source de vérité : le prix courant du plat, même logique que
+        # `services.calculer_total_commande`).
+        lignes = models.OrderItem.objects.filter(
+            tenant=request.user.tenant,
+            ticket__order__in=commandes,
+        ).exclude(statut_ligne=models.OrderItem.StatutLigne.ANNULE)
+
+        par_article = list(
+            lignes.values("plat_id", "plat__nom", "plat__categorie__nom")
+            .annotate(quantite_totale=Sum("quantite"), montant_total=Sum(F("quantite") * F("plat__prix")))
+            .order_by("-montant_total")
+        )
+        par_categorie = list(
+            lignes.values("plat__categorie_id", "plat__categorie__nom")
+            .annotate(quantite_totale=Sum("quantite"), montant_total=Sum(F("quantite") * F("plat__prix")))
+            .order_by("-montant_total")
+        )
+
         return Response(
             {
                 "date": jour.isoformat(),
                 "total_ventes": total_ventes,
                 "nb_commandes": len(detail),
                 "commandes": detail,
+                "par_article": [
+                    {
+                        "plat": row["plat_id"],
+                        "plat_nom": row["plat__nom"],
+                        "categorie_nom": row["plat__categorie__nom"],
+                        "quantite_totale": row["quantite_totale"],
+                        "montant_total": row["montant_total"],
+                    }
+                    for row in par_article
+                ],
+                "par_categorie": [
+                    {
+                        "categorie": row["plat__categorie_id"],
+                        "categorie_nom": row["plat__categorie__nom"],
+                        "quantite_totale": row["quantite_totale"],
+                        "montant_total": row["montant_total"],
+                    }
+                    for row in par_categorie
+                ],
             }
         )

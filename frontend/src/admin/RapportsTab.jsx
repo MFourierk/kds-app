@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchStats, fetchVentesParJour } from '../api'
 import { formatPrix } from '../client/formatPrix'
-import { LIBELLE_MODE_PAIEMENT } from '../print/imprimer'
+import { LIBELLE_MODE_PAIEMENT, echapper, ouvrirRapportImpression } from '../print/imprimer'
 import HorizontalBarChart from './charts/HorizontalBarChart'
 import LineChartHeures from './charts/LineChartHeures'
 import StatTile from './StatTile'
@@ -123,6 +123,44 @@ export default function RapportsTab() {
     }
   }, [dateVentes])
 
+  function imprimerVentes() {
+    if (!ventes) return
+    const ligneArticle = (a) =>
+      `<tr><td>${echapper(a.plat_nom)}</td><td>${echapper(a.categorie_nom ?? '—')}</td><td>${a.quantite_totale}</td><td>${formatPrix(a.montant_total, 'XOF')}</td></tr>`
+    const ligneCategorie = (c) =>
+      `<tr><td>${echapper(c.categorie_nom ?? '—')}</td><td>${c.quantite_totale}</td><td>${formatPrix(c.montant_total, 'XOF')}</td></tr>`
+
+    const corpsHtml = `
+      <h1>État des ventes</h1>
+      <p class="sous-titre">${new Date(ventes.date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      <table>
+        <tr><td>Total encaissé</td><td class="total">${formatPrix(ventes.total_ventes, 'XOF')}</td></tr>
+        <tr><td>Commandes payées</td><td>${ventes.nb_commandes}</td></tr>
+      </table>
+
+      <h2>Ventes par article</h2>
+      ${
+        ventes.par_article.length === 0
+          ? '<p>Aucune vente cette date.</p>'
+          : `<table>
+              <thead><tr><th>Article</th><th>Catégorie</th><th>Qté</th><th>Montant</th></tr></thead>
+              <tbody>${ventes.par_article.map(ligneArticle).join('')}</tbody>
+            </table>`
+      }
+
+      <h2>Ventes par catégorie</h2>
+      ${
+        ventes.par_categorie.length === 0
+          ? '<p>Aucune vente cette date.</p>'
+          : `<table>
+              <thead><tr><th>Catégorie</th><th>Qté</th><th>Montant</th></tr></thead>
+              <tbody>${ventes.par_categorie.map(ligneCategorie).join('')}</tbody>
+            </table>`
+      }
+    `
+    ouvrirRapportImpression(`État des ventes — ${ventes.date}`, corpsHtml)
+  }
+
   const totalCommandes = donnees?.heuresPointe.reduce((s, h) => s + h.nb_commandes, 0) ?? 0
   const totalGaspille = donnees?.gaspillage.reduce((s, g) => s + g.quantite_totale, 0) ?? 0
   const dureeGlobaleMoyenne =
@@ -157,6 +195,14 @@ export default function RapportsTab() {
             className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none"
           />
           {chargementVentes && <span className="text-sm text-gray-400">Chargement...</span>}
+          {ventes && (
+            <button
+              onClick={imprimerVentes}
+              className="ml-auto rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              🖨️ Imprimer
+            </button>
+          )}
         </div>
 
         {erreurVentes ? (
@@ -197,6 +243,64 @@ export default function RapportsTab() {
                   ))}
                 </tbody>
               </table>
+            )}
+
+            {ventes.par_article.length > 0 && (
+              <div className="mt-6">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Ventes par article</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-gray-500">
+                      <th className="pb-2 font-medium">Article</th>
+                      <th className="pb-2 font-medium">Catégorie</th>
+                      <th className="pb-2 text-right font-medium">Qté</th>
+                      <th className="pb-2 text-right font-medium">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ventes.par_article.map((a) => (
+                      <tr key={a.plat} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="py-2 text-gray-900">{a.plat_nom}</td>
+                        <td className="py-2 text-gray-600">{a.categorie_nom ?? '—'}</td>
+                        <td className="py-2 text-right text-gray-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {a.quantite_totale}
+                        </td>
+                        <td className="py-2 text-right font-semibold text-gray-700" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {formatPrix(a.montant_total, 'XOF')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {ventes.par_categorie.length > 0 && (
+              <div className="mt-6">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Ventes par catégorie</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-gray-500">
+                      <th className="pb-2 font-medium">Catégorie</th>
+                      <th className="pb-2 text-right font-medium">Qté</th>
+                      <th className="pb-2 text-right font-medium">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ventes.par_categorie.map((c) => (
+                      <tr key={c.categorie ?? 'sans-categorie'} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="py-2 text-gray-900">{c.categorie_nom ?? '—'}</td>
+                        <td className="py-2 text-right text-gray-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {c.quantite_totale}
+                        </td>
+                        <td className="py-2 text-right font-semibold text-gray-700" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {formatPrix(c.montant_total, 'XOF')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}
