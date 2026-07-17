@@ -127,18 +127,37 @@ export async function apiFetch(path, options = {}) {
   // cas, sinon le navigateur n'ajoute plus lui-même le boundary
   // multipart et la requête arrive illisible côté serveur.
   const estFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
-  const doFetch = (accessToken) => {
+  const doFetch = async (accessToken) => {
     const controleur = new AbortController()
     const minuteur = setTimeout(() => controleur.abort(), DELAI_MAX_MS)
-    return fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      signal: controleur.signal,
-      headers: {
-        ...(estFormData ? {} : { 'Content-Type': 'application/json' }),
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        ...options.headers,
-      },
-    }).finally(() => clearTimeout(minuteur))
+    let response
+    try {
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        signal: controleur.signal,
+        headers: {
+          ...(estFormData ? {} : { 'Content-Type': 'application/json' }),
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...options.headers,
+        },
+      })
+    } catch (e) {
+      clearTimeout(minuteur)
+      throw e
+    }
+    // `fetch()` se résout dès les en-têtes reçus, pas une fois le corps
+    // téléchargé (piège trouvé côté client QR, cf. clientApi.js — même
+    // cause ici) : désarmer le minuteur ici, avant que les ~35 appelants
+    // de `apiFetch` ne lisent le corps via `response.json()`, laissait ce
+    // corps sans aucune protection si la connexion dégrade pile à ce
+    // moment-là. On ne touche pas la signature de retour (toujours un
+    // `Response`) — on protège juste `.json()`/`.text()` eux-mêmes.
+    const finDelai = () => clearTimeout(minuteur)
+    const jsonOriginal = response.json.bind(response)
+    response.json = () => jsonOriginal().finally(finDelai)
+    const textOriginal = response.text.bind(response)
+    response.text = () => textOriginal().finally(finDelai)
+    return response
   }
 
   let response = await doFetch(tokens?.access)

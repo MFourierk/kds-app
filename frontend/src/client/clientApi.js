@@ -19,53 +19,65 @@ export class ErreurReseau extends Error {}
 // la file hors-ligne existante (§5.5) plutôt que de bloquer l'écran.
 const DELAI_MAX_MS = 12000
 
+// Piège trouvé APRÈS coup, toujours en usage réel : `fetch()` se résout
+// dès que les EN-TÊTES arrivent, pas une fois le corps téléchargé. Le
+// premier correctif (ci-dessus) désarmait le minuteur juste après ça,
+// avant même que `response.json()` (appelé par chaque fonction
+// ci-dessous) ait lu le corps — sur une connexion qui dégrade
+// précisément pendant le transfert du corps (après des en-têtes reçus
+// sans souci), le blocage "Envoi..." revenait à l'identique malgré le
+// minuteur. Le corps est donc lu ICI, pendant que le minuteur protège
+// encore l'appel, plutôt que de renvoyer un `Response` non consommé.
 async function qrFetch(path, options = {}) {
-  let response
   const controleur = new AbortController()
   const minuteur = setTimeout(() => controleur.abort(), DELAI_MAX_MS)
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: { 'Content-Type': 'application/json', ...options.headers },
       signal: controleur.signal,
     })
+    // Pas de `.catch()` ici : si la lecture du corps échoue parce que le
+    // minuteur vient de l'interrompre (`AbortError`), cette erreur DOIT
+    // remonter jusqu'au bloc `catch` ci-dessous pour devenir une
+    // `ErreurReseau` — l'avaler silencieusement ferait croire à un succès
+    // (`ok: true, data: null`) sur une commande dont on ne sait en réalité
+    // pas si elle est passée, sans jamais la mettre en file hors-ligne.
+    const data = await response.json()
+    return { ok: response.ok, data }
   } catch {
     throw new ErreurReseau(MESSAGE_HORS_LIGNE)
   } finally {
     clearTimeout(minuteur)
   }
-  return response
 }
 
 export async function fetchMenu(qrToken, { excludeAllergenes = [], regime } = {}) {
   const params = new URLSearchParams()
   excludeAllergenes.forEach((a) => params.append('exclure_allergene', a))
   if (regime) params.set('regime', regime)
-  const response = await qrFetch(`/api/qr/${qrToken}/menu/?${params}`)
-  if (!response.ok) throw new Error('Menu indisponible.')
-  return response.json()
+  const { ok, data } = await qrFetch(`/api/qr/${qrToken}/menu/?${params}`)
+  if (!ok) throw new Error('Menu indisponible.')
+  return data
 }
 
 export async function creerCommande(qrToken, items, idempotencyKey) {
-  const response = await qrFetch(`/api/qr/${qrToken}/orders/create/`, {
+  const { ok, data } = await qrFetch(`/api/qr/${qrToken}/orders/create/`, {
     method: 'POST',
     body: JSON.stringify({ items, idempotency_key: idempotencyKey }),
   })
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}))
-    throw new Error(data.items || 'Impossible de passer la commande.')
-  }
-  return response.json()
+  if (!ok) throw new Error(data?.items || 'Impossible de passer la commande.')
+  return data
 }
 
 export async function fetchSuivi(qrToken) {
-  const response = await qrFetch(`/api/qr/${qrToken}/orders/`)
-  if (!response.ok) throw new Error('Suivi indisponible.')
-  return response.json()
+  const { ok, data } = await qrFetch(`/api/qr/${qrToken}/orders/`)
+  if (!ok) throw new Error('Suivi indisponible.')
+  return data
 }
 
 export async function appelerServeur(qrToken) {
-  const response = await qrFetch(`/api/qr/${qrToken}/appel-serveur/`, { method: 'POST' })
-  if (!response.ok) throw new Error("Impossible d'appeler le serveur.")
-  return response.json()
+  const { ok, data } = await qrFetch(`/api/qr/${qrToken}/appel-serveur/`, { method: 'POST' })
+  if (!ok) throw new Error("Impossible d'appeler le serveur.")
+  return data
 }
