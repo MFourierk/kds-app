@@ -57,6 +57,28 @@ class PeutEncaisser(BasePermission):
         )
 
 
+class PeutFermerAppelServeur(BasePermission):
+    """
+    Réservé aux rôles qui accusent réception d'un appel client (§5.6,
+    bandeau "Appel serveur" diffusé à tous les postes) — serveur en
+    premier lieu (c'est son rôle), manager/admin en secours si le
+    serveur assigné est occupé ailleurs. Volontairement PAS cuisinier ni
+    caissier : le bandeau doit rester visible pour eux tant que personne
+    de qualifié ne l'a traité, sans qu'ils puissent le faire disparaître
+    eux-mêmes.
+    """
+
+    message = "Réservé aux serveurs, managers et administrateurs."
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and getattr(user, "role", None) in (User.Role.ADMIN, User.Role.MANAGER, User.Role.SERVEUR)
+        )
+
+
 class IsAdmin(BasePermission):
     """
     Réservé au rôle admin STRICT (pas manager) — utilisé pour des actions

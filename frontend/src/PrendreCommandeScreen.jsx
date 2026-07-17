@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { apiFetch, logout } from './api'
 import { formatPrix } from './client/formatPrix'
 import SelecteurModificateursPopup, { resoudreModificateursDuPlat } from './SelecteurModificateurs'
+import BandeauAppelServeur from './BandeauAppelServeur'
+import { useTicketsSocket } from './useTicketsSocket'
 
 /**
  * Prise de commande par le personnel (§5.1/§5.6, demandé après coup) —
@@ -20,7 +22,10 @@ import SelecteurModificateursPopup, { resoudreModificateursDuPlat } from './Sele
  * commande devant un client : l'écran doit donner envie, pas juste être
  * fonctionnel.
  */
-export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion }) {
+export default function PrendreCommandeScreen({ role, onChangerEcran, onDeconnexion }) {
+  // Même raisonnement que CaisseScreen (§5.6) : pas de canal temps réel
+  // jusqu'ici, connecté seulement pour le bandeau "Appel serveur" partagé.
+  const { appelsServeurActifs } = useTicketsSocket('master')
   const [tables, setTables] = useState(null)
   const [categories, setCategories] = useState([])
   const [items, setItems] = useState([])
@@ -182,6 +187,8 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
           </button>
         </div>
       </header>
+
+      <BandeauAppelServeur appels={appelsServeurActifs} role={role} />
 
       {message && (
         <div

@@ -7,8 +7,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from . import models, serializers, services
-from .permissions import IsAdmin, IsManagerOrAdmin, IsTenantMember, PeutEncaisser
+from . import models, serializers, services, signals
+from .permissions import IsAdmin, IsManagerOrAdmin, IsTenantMember, PeutEncaisser, PeutFermerAppelServeur
 
 
 class TenantScopedViewSetMixin:
@@ -206,6 +206,16 @@ class RestaurantTableViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewse
     queryset = models.RestaurantTable.objects.all()
     serializer_class = serializers.RestaurantTableSerializer
 
+    def get_permissions(self):
+        # `fermer_appel_serveur` (§5.6) doit rester accessible au rôle
+        # serveur — c'est justement lui qui doit accuser réception de
+        # l'appel — pas seulement manager/admin comme le reste des
+        # écritures via `ManagerWriteMixin` (même schéma que
+        # `StationViewSet.reassigner`).
+        if self.action == "fermer_appel_serveur":
+            return [IsAuthenticated(), IsTenantMember(), PeutFermerAppelServeur()]
+        return super().get_permissions()
+
     @action(detail=True, methods=["post"])
     def liberer(self, request, pk=None):
         """
@@ -221,6 +231,34 @@ class RestaurantTableViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewse
         table = self.get_object()
         table.statut = models.RestaurantTable.Statut.LIBRE
         table.save(update_fields=["statut", "updated_at"])
+        return Response(self.get_serializer(table).data)
+
+    @action(detail=True, methods=["post"], url_path="fermer-appel-serveur")
+    def fermer_appel_serveur(self, request, pk=None):
+        """
+        Ferme le bandeau "Appel serveur" diffusé à tous les postes
+        (§5.6) — SEUL geste qui le fait disparaître, aucun timer
+        automatique côté écran : le but est justement qu'aucun employé
+        ne puisse dire qu'il n'a pas vu tant que personne de qualifié
+        n'a explicitement traité l'appel.
+
+        Retombe sur "Occupée" (pas "Libre") s'il reste une commande non
+        payée sur cette table — même logique que le retour automatique
+        à "Libre" une fois tout payé (cf. `signals.py`), pour ne pas
+        faire disparaître une table encore en cours de service.
+        """
+
+        table = self.get_object()
+        a_commande_active = (
+            table.commandes.filter(statut_paiement=models.Order.StatutPaiement.EN_ATTENTE)
+            .exclude(statut=models.Order.Statut.ANNULEE)
+            .exists()
+        )
+        table.statut = (
+            models.RestaurantTable.Statut.OCCUPEE if a_commande_active else models.RestaurantTable.Statut.LIBRE
+        )
+        table.save(update_fields=["statut", "updated_at"])
+        signals.broadcast_appel_serveur(table, "appel_serveur_ferme")
         return Response(self.get_serializer(table).data)
 
 

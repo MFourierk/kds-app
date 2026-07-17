@@ -4,6 +4,8 @@ import { formatPrix } from './client/formatPrix'
 import { construireRecuHTML, ouvrirApercuImpression } from './print/imprimer'
 import PaiementPicker from './PaiementPicker'
 import VenteComptoirScreen from './VenteComptoirScreen'
+import BandeauAppelServeur from './BandeauAppelServeur'
+import { useTicketsSocket } from './useTicketsSocket'
 
 // `caissier` ajouté après coup (§TPE — elle doit aussi pouvoir encaisser
 // les commandes de table, pas seulement la vente comptoir) : correspond
@@ -52,6 +54,11 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
   // ouvre sur "Vente comptoir" (son usage principal), pas "Commandes de
   // table" comme le manager/admin.
   const [onglet, setOnglet] = useState(ongletParDefaut)
+  // Écran sans canal temps réel jusqu'ici (§5.6) — connecté seulement pour
+  // recevoir le bandeau "Appel serveur" partagé par tous les postes, les
+  // commandes/tickets eux-mêmes restent gérés par le polling REST existant
+  // ci-dessous (`chargerCommandes`).
+  const { appelsServeurActifs } = useTicketsSocket('master')
 
   const peutEncaisser = ROLES_ENCAISSEMENT.includes(utilisateur?.role)
   // Même liste de rôles qu'`ROLES_ENCAISSEMENT` aujourd'hui, mais nommée à
@@ -209,6 +216,8 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
           </button>
         </div>
       </header>
+
+      <BandeauAppelServeur appels={appelsServeurActifs} role={utilisateur?.role} />
 
       {onglet === 'comptoir' && peutEncaisser ? (
         <VenteComptoirScreen utilisateur={utilisateur} tenant={tenant} embarque />

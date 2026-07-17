@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { apiFetch, logout } from './api'
 import { useTicketsSocket } from './useTicketsSocket'
+import BandeauAppelServeur from './BandeauAppelServeur'
 
 const LIBELLE_CONNEXION = {
   connexion: { texte: 'Connexion...', couleur: 'bg-amber-500' },
@@ -21,8 +22,8 @@ const LIBELLE_CONNEXION = {
  * donc regroupés par `order` pour offrir un geste "tout servir" par
  * table plutôt que ticket par ticket.
  */
-export default function ServeurScreen({ onChangerEcran, onDeconnexion }) {
-  const { tickets, statutConnexion } = useTicketsSocket('master')
+export default function ServeurScreen({ role, onChangerEcran, onDeconnexion }) {
+  const { tickets, statutConnexion, appelsServeurActifs } = useTicketsSocket('master')
   const [enCours, setEnCours] = useState(null) // id (ligne ou commande) en cours d'action
   const [erreur, setErreur] = useState('')
 
@@ -120,6 +121,8 @@ export default function ServeurScreen({ onChangerEcran, onDeconnexion }) {
           </button>
         </div>
       </header>
+
+      <BandeauAppelServeur appels={appelsServeurActifs} role={role} />
 
       {erreur && (
         <div className="mb-4 rounded-xl bg-red-600 p-3 text-center text-sm font-semibold text-white shadow-lg">

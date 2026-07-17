@@ -58,7 +58,12 @@ class KDSConsumer(AsyncJsonWebsocketConsumer):
         # pendant une panne internet du restaurant) resterait invisible
         # indéfiniment côté cuisine, alors même qu'il est bien en base.
         snapshot = await self._get_active_tickets_snapshot(user.tenant_id, self.scope_id)
-        await self.send_json({"event": "sync", "tickets": snapshot})
+        # Appels serveur en cours (§5.6) : tenant entier, jamais filtré par
+        # poste — un cuisinier qui se (re)connecte doit voir tout de suite
+        # un appel déclenché pendant qu'il était déconnecté, pas seulement
+        # ceux qui arrivent après coup via `broadcast_appel_serveur`.
+        appels = await self._get_appels_serveur_actifs(user.tenant_id)
+        await self.send_json({"event": "sync", "tickets": snapshot, "appels_serveur": appels})
 
     async def disconnect(self, close_code):
         if hasattr(self, "_stop_heartbeat"):
@@ -84,6 +89,18 @@ class KDSConsumer(AsyncJsonWebsocketConsumer):
                 )
             except asyncio.TimeoutError:
                 await presence.heartbeat(self.tenant_id, self.scope_id, self.channel_name)
+                # Trouvé en usage réel (postes Cuisine/Bar restés ouverts
+                # des heures, jamais tapés par personne) : une connexion
+                # WebSocket peut mourir silencieusement (NAT/proxy qui
+                # coupe une connexion inactive) sans jamais déclencher
+                # `onclose` côté navigateur — l'écran reste bloqué sur
+                # "En ligne" alors qu'il ne reçoit plus rien, jusqu'à un
+                # rechargement manuel. Cette frame régulière (déjà
+                # présente pour la présence Redis) sert aussi de
+                # ping applicatif : `useTicketsSocket.js` surveille le
+                # dernier message reçu et force une reconnexion s'il ne
+                # reçoit plus rien pendant trop longtemps.
+                await self.send_json({"event": "ping"})
 
     async def ticket_event(self, event):
         """Relaye au client un événement poussé par `kds_core.signals` via `group_send`."""
@@ -117,3 +134,12 @@ class KDSConsumer(AsyncJsonWebsocketConsumer):
             return []
 
         return json.loads(JSONRenderer().render(OrderTicketSerializer(tickets, many=True).data))
+
+    @database_sync_to_async
+    def _get_appels_serveur_actifs(self, tenant_id):
+        from .models import RestaurantTable
+
+        tables = RestaurantTable.objects.filter(
+            tenant_id=tenant_id, statut=RestaurantTable.Statut.APPEL_SERVEUR
+        )
+        return [{"id": str(t.id), "numero": t.numero, "statut": t.statut} for t in tables]

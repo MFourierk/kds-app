@@ -162,10 +162,16 @@ function App() {
       />
     )
   } else if (ecran.scopeId === 'service') {
-    contenu = <ServeurScreen onChangerEcran={() => setEcran('selection')} onDeconnexion={() => setConnecte(false)} />
+    contenu = (
+      <ServeurScreen role={role} onChangerEcran={() => setEcran('selection')} onDeconnexion={() => setConnecte(false)} />
+    )
   } else if (ecran.scopeId === 'prendre-commande') {
     contenu = (
-      <PrendreCommandeScreen onChangerEcran={() => setEcran('selection')} onDeconnexion={() => setConnecte(false)} />
+      <PrendreCommandeScreen
+        role={role}
+        onChangerEcran={() => setEcran('selection')}
+        onDeconnexion={() => setConnecte(false)}
+      />
     )
   } else if (ecran.scopeId === 'comptoir') {
     contenu = (
@@ -180,6 +186,7 @@ function App() {
       <KitchenScreen
         scopeId={ecran.scopeId}
         titre={ecran.titre}
+        role={role}
         onChangerEcran={ecranVerrouille ? undefined : () => setEcran('selection')}
         onDeconnexion={() => setConnecte(false)}
       />

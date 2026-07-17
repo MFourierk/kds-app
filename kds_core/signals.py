@@ -221,6 +221,35 @@ def _sync_ticket_statut_depuis_lignes(sender, instance, **kwargs):
     _broadcast(ticket, created=False)
 
 
+def broadcast_appel_serveur(table, event):
+    """
+    Diffuse un événement "appel serveur" (déclenché ou fermé, §5.6) à
+    TOUS les écrans staff connectés — Master ET chaque poste (Cuisine,
+    Bar...), pas seulement Master comme avant. Constat client réel : un
+    cuisinier/barman qui n'a jamais ouvert l'écran Master (il vit sur
+    l'écran de son poste, `ws/kds/<station>/`) ne recevait jamais
+    l'appel, alors même que "aucun employé ne dira qu'il n'a pas vu" est
+    justement le but recherché.
+    """
+
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+
+    from .models import Station
+
+    payload = {"id": str(table.id), "numero": table.numero, "statut": table.statut}
+    groupes = [f"kds_{table.tenant_id}_master"]
+    groupes += [
+        f"kds_{table.tenant_id}_{station_id}"
+        for station_id in Station.objects.filter(tenant_id=table.tenant_id).values_list("id", flat=True)
+    ]
+    for group_name in groupes:
+        async_to_sync(channel_layer.group_send)(
+            group_name, {"type": "table.event", "event": event, "table": payload}
+        )
+
+
 def _broadcast(instance, created):
     """
     Diffuse aux écrans poste ET Master. Un ticket retenu (Fire/Hold,

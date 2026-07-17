@@ -3,6 +3,7 @@ import { apiFetch, logout } from './api'
 import { useTicketsSocket } from './useTicketsSocket'
 import { jouerDoubleBip } from './notificationSound'
 import TicketCard from './TicketCard'
+import BandeauAppelServeur from './BandeauAppelServeur'
 import { construireTicketHTML, ouvrirApercuImpression } from './print/imprimer'
 
 const LIBELLE_CONNEXION = {
@@ -19,18 +20,15 @@ const DUREE_MISE_EN_AVANT_NOUVEAU_MS = 6000
  * propres tickets — cf. `KDSConsumer` côté backend). Même composant pour
  * les deux, seul le canal WebSocket change.
  */
-export default function KitchenScreen({ scopeId, titre, onChangerEcran, onDeconnexion }) {
-  const { tickets, statutConnexion, dernierAppelServeur, dernierTicketCree } = useTicketsSocket(scopeId)
-  const [alerteAppel, setAlerteAppel] = useState(null)
+export default function KitchenScreen({ scopeId, titre, role, onChangerEcran, onDeconnexion }) {
+  const { tickets, statutConnexion, dernierAppelServeur, appelsServeurActifs, dernierTicketCree } =
+    useTicketsSocket(scopeId)
   const [ticketsNouveaux, setTicketsNouveaux] = useState(new Set())
   const [messageImpression, setMessageImpression] = useState(null) // { texte, erreur }
 
   useEffect(() => {
     if (!dernierAppelServeur) return
     jouerDoubleBip()
-    setAlerteAppel(dernierAppelServeur)
-    const timer = setTimeout(() => setAlerteAppel(null), 15000)
-    return () => clearTimeout(timer)
   }, [dernierAppelServeur])
 
   useEffect(() => {
@@ -112,11 +110,7 @@ export default function KitchenScreen({ scopeId, titre, onChangerEcran, onDeconn
         </div>
       </header>
 
-      {alerteAppel && (
-        <div className="mb-6 rounded-xl bg-red-600 p-4 text-center text-xl font-bold text-white shadow-lg">
-          🔔 Appel serveur — Table {alerteAppel.numero}
-        </div>
-      )}
+      <BandeauAppelServeur appels={appelsServeurActifs} role={role} />
 
       {messageImpression && (
         <div

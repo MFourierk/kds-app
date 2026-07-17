@@ -1,12 +1,10 @@
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import models, presence, serializers, services
+from . import models, presence, serializers, services, signals
 
 # Interaction client via QR code (§5.6). Accès public (AllowAny), scopé par
 # `qr_code_token` — voir la note en tête de la section QR dans serializers.py
@@ -163,7 +161,8 @@ class QrCallWaiterView(APIView):
     """
     `POST /api/qr/<token>/appel-serveur/` — bouton d'appel serveur (§5.6),
     alerte ciblée avec le numéro de table exact, diffusée en temps réel à
-    l'écran Master/pocket serveur déjà connecté (`ws/kds/master/`, Phase 1).
+    TOUS les écrans staff connectés (`broadcast_appel_serveur`) — pas
+    seulement Master, cf. le raisonnement complet sur cette fonction.
     """
 
     permission_classes = [AllowAny]
@@ -173,16 +172,7 @@ class QrCallWaiterView(APIView):
         table.statut = models.RestaurantTable.Statut.APPEL_SERVEUR
         table.save(update_fields=["statut", "updated_at"])
 
-        channel_layer = get_channel_layer()
-        if channel_layer is not None:
-            async_to_sync(channel_layer.group_send)(
-                f"kds_{table.tenant_id}_master",
-                {
-                    "type": "table.event",
-                    "event": "appel_serveur",
-                    "table": {"id": str(table.id), "numero": table.numero, "statut": table.statut},
-                },
-            )
+        signals.broadcast_appel_serveur(table, "appel_serveur")
 
         data = {"detail": "Le serveur a été notifié."}
         data.update(_presence_payload(table.tenant_id))
