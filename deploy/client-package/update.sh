@@ -56,8 +56,14 @@ echo "Nouvelle version disponible : $DERNIERE_VERSION"
 TAR_TEMP=$(mktemp --suffix=.tar)
 trap 'rm -f "$TAR_TEMP"' EXIT
 
-echo "-> Téléchargement..."
-curl -fsS -o "$TAR_TEMP" \
+echo "-> Téléchargement (~110 Mo, reprise automatique en cas de coupure)..."
+# `-C -` : reprend là où une tentative précédente s'est arrêtée plutôt que
+# de repartir de zéro ; `--retry`/`--retry-all-errors` : un fichier de
+# cette taille sur une connexion imparfaite (Wi-Fi client, cf. terrain)
+# a de vraies chances de subir une coupure en cours de route — sans ça,
+# une simple coupure faisait échouer toute la mise à jour au lieu de
+# réessayer automatiquement.
+curl -fsS --retry 5 --retry-delay 3 --retry-all-errors -C - -o "$TAR_TEMP" \
   "${LICENCE_MASTER_URL}/api/licence/telecharger/${DERNIERE_VERSION}/?identifiant=${LICENCE_IDENTIFIANT}&cle_api=${LICENCE_CLE_API}"
 
 echo "-> Chargement de l'image Docker..."
