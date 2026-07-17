@@ -1,10 +1,17 @@
 import { useState } from 'react'
 import PlatCard from './PlatCard'
+import { GroupesModificateurs, categoriesObligatoiresManquantes, groupesDepuisModificateurs } from '../SelecteurModificateurs'
 
 function DetailPlatModal({ plat, onFermer, onConfirmer }) {
   const [quantite, setQuantite] = useState(1)
   const [serviceImmediat, setServiceImmediat] = useState(true)
   const [commentaire, setCommentaire] = useState('')
+  // `plat.modifiers` est déjà imbriqué avec ses détails complets ici
+  // (`QrMenuItemSerializer`, pas une simple liste d'IDs comme côté staff)
+  // — pas besoin de croiser un catalogue séparé.
+  const groupes = groupesDepuisModificateurs(plat.modifiers || [])
+  const [selection, setSelection] = useState([])
+  const manquantes = categoriesObligatoiresManquantes(groupes, selection)
 
   function confirmer() {
     onConfirmer({
@@ -14,6 +21,11 @@ function DetailPlatModal({ plat, onFermer, onConfirmer }) {
       quantite,
       service_immediat: serviceImmediat,
       commentaire_libre: commentaire,
+      modificateurs: selection,
+      modificateurs_libelles: groupes
+        .flatMap((g) => g.options)
+        .filter((o) => selection.includes(o.id))
+        .map((o) => o.libelle),
     })
   }
 
@@ -83,12 +95,19 @@ function DetailPlatModal({ plat, onFermer, onConfirmer }) {
           className="mb-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
         />
 
+        {groupes.length > 0 && (
+          <div className="mb-4">
+            <GroupesModificateurs groupes={groupes} selection={selection} onChangerSelection={setSelection} />
+          </div>
+        )}
+
         <button
           onClick={confirmer}
-          className="w-full rounded-lg py-3 font-semibold text-white"
+          disabled={manquantes.length > 0}
+          className="w-full rounded-lg py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           style={{ backgroundColor: 'var(--color-secondary, #C9A24B)' }}
         >
-          Ajouter au panier
+          {manquantes.length > 0 ? `Choisir : ${manquantes.map((g) => g.nom).join(', ')}` : 'Ajouter au panier'}
         </button>
       </div>
     </div>
@@ -99,6 +118,14 @@ export default function MenuView({ categories, devise, onAjouter }) {
   const [platDetail, setPlatDetail] = useState(null)
 
   function ajoutRapide(plat) {
+    // Un plat avec modificateurs ouvre toujours le détail (§5.2) — même
+    // s'ils sont tous optionnels, le "+" rapide ne doit pas escamoter la
+    // possibilité de personnaliser (ex: Piquant) ; un plat sans
+    // modificateur garde l'ajout instantané d'origine.
+    if (plat.modifiers?.length > 0) {
+      setPlatDetail(plat)
+      return
+    }
     onAjouter({
       plat: plat.id,
       plat_nom: plat.nom,
@@ -106,6 +133,7 @@ export default function MenuView({ categories, devise, onAjouter }) {
       quantite: 1,
       service_immediat: true,
       commentaire_libre: '',
+      modificateurs: [],
     })
   }
 

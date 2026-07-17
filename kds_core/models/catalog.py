@@ -39,6 +39,43 @@ class MenuCategory(TenantScopedModel):
         return self.nom
 
 
+class ModifierCategory(TenantScopedModel):
+    """
+    Regroupement thématique de modificateurs (Cuisson, Sauce & Garniture,
+    Piquant...), demandé après coup pour structurer la personnalisation
+    d'un plat — jusqu'ici `Modifier` était une liste plate. Orthogonal à
+    `Modifier.type_modifier` (allergie/préférence/supplément), qui reste
+    inchangé : une catégorie regroupe des choix de préparation, pas une
+    classification de sensibilité alimentaire.
+
+    `obligatoire` : le client/serveur doit choisir un modificateur de
+    cette catégorie avant de pouvoir valider un plat qui en propose au
+    moins un (ex: Cuisson pour une entrecôte) — appliqué à la fois côté
+    écran (`SelecteurModificateurs.jsx`) et côté serveur
+    (`services.valider_modificateurs`), pas seulement une contrainte
+    d'interface contournable.
+
+    `selection_multiple` : par défaut `False` (un seul choix, ex: on ne
+    peut pas être à la fois "Saignant" et "Bien cuit") — posé dès
+    maintenant même si les catégories fournies sont toutes à choix
+    unique, pour éviter une migration de rattrapage si une future
+    catégorie doit permettre plusieurs choix simultanés.
+    """
+
+    nom = models.CharField(max_length=80)
+    obligatoire = models.BooleanField(default=False)
+    selection_multiple = models.BooleanField(default=False)
+    ordre_affichage = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Catégorie de modificateur"
+        verbose_name_plural = "Catégories de modificateur"
+        ordering = ["ordre_affichage", "nom"]
+
+    def __str__(self):
+        return self.nom
+
+
 class Modifier(TenantScopedModel):
     """Modificateur applicable à un ou plusieurs plats (allergie, préférence, supplément)."""
 
@@ -50,6 +87,18 @@ class Modifier(TenantScopedModel):
     libelle = models.CharField(max_length=100)
     type_modifier = models.CharField(
         max_length=20, choices=TypeModifier.choices, default=TypeModifier.PREFERENCE
+    )
+    # Nullable : les modificateurs allergie/supplément existants n'ont pas
+    # vocation à rejoindre une des 7 catégories de préparation (cf.
+    # `ModifierCategory`) — seuls les nouveaux modificateurs de préférence
+    # de préparation en ont une. `PROTECT` (pas `SET_NULL`) une fois
+    # rattaché : un modificateur qui perdrait silencieusement sa catégorie
+    # à la suppression de celle-ci fausserait `services.valider_modificateurs`
+    # (la catégorie obligatoire ne serait plus détectée) — même logique que
+    # `MenuCategory.station`/`ProtectedDeleteMixin`, forcer à réassigner les
+    # modificateurs avant de supprimer leur catégorie.
+    categorie = models.ForeignKey(
+        ModifierCategory, on_delete=models.PROTECT, null=True, blank=True, related_name="modificateurs"
     )
     niveau_alerte_critique = models.BooleanField(
         default=False, help_text="Affichage renforcé sur le ticket (ex: allergie sévère)"

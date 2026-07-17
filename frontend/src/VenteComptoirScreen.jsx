@@ -3,6 +3,7 @@ import { apiFetch, fetchTenant, logout } from './api'
 import { formatPrix } from './client/formatPrix'
 import { construireRecuHTML, ouvrirApercuImpression } from './print/imprimer'
 import PaiementPicker from './PaiementPicker'
+import SelecteurModificateursPopup, { resoudreModificateursDuPlat } from './SelecteurModificateurs'
 
 /**
  * Écran TPE — vente comptoir (§vente comptoir, demandé après coup) :
@@ -33,6 +34,8 @@ import PaiementPicker from './PaiementPicker'
 export default function VenteComptoirScreen({ utilisateur, onChangerEcran, onDeconnexion, embarque = false, tenant: tenantProp }) {
   const [categories, setCategories] = useState([])
   const [items, setItems] = useState([])
+  const [catalogueModificateurs, setCatalogueModificateurs] = useState([])
+  const [catalogueCategoriesModificateurs, setCatalogueCategoriesModificateurs] = useState([])
   const [recherche, setRecherche] = useState('')
   const [categorieActive, setCategorieActive] = useState('tous')
   const [panier, setPanier] = useState([])
@@ -42,15 +45,21 @@ export default function VenteComptoirScreen({ utilisateur, onChangerEcran, onDec
   const [enCours, setEnCours] = useState(false)
   const [message, setMessage] = useState(null)
   const [tenantLocal, setTenantLocal] = useState(null)
+  // Plat en attente de personnalisation (§5.2) — cf. `PrendreCommandeScreen.jsx`.
+  const [platPourModificateurs, setPlatPourModificateurs] = useState(null)
   const tenant = tenantProp ?? tenantLocal
 
   useEffect(() => {
     Promise.all([
       apiFetch('/api/menu-categories/').then((r) => r.json()),
       apiFetch('/api/menu-items/').then((r) => r.json()),
-    ]).then(([c, i]) => {
+      apiFetch('/api/modifiers/').then((r) => r.json()),
+      apiFetch('/api/modifier-categories/').then((r) => r.json()),
+    ]).then(([c, i, m, cm]) => {
       setCategories(Array.isArray(c) ? c.sort((a, b) => a.ordre_affichage - b.ordre_affichage) : [])
       setItems(Array.isArray(i) ? i : [])
+      setCatalogueModificateurs(Array.isArray(m) ? m : [])
+      setCatalogueCategoriesModificateurs(Array.isArray(cm) ? cm : [])
     })
   }, [])
 
@@ -76,14 +85,41 @@ export default function VenteComptoirScreen({ utilisateur, onChangerEcran, onDec
     })
   }, [items, categorieActive, recherche])
 
-  function ajouterAuPanier(plat) {
+  // Deux lignes du même plat ne fusionnent que si elles portent EXACTEMENT
+  // les mêmes modificateurs (§5.2) — sinon deux cuissons différentes pour
+  // la même "Entrecôte" perdraient silencieusement l'une des deux
+  // sélections en fusionnant leurs quantités.
+  function memeSelectionModificateurs(a, b) {
+    if (a.length !== b.length) return false
+    const ensembleA = new Set(a)
+    return b.every((id) => ensembleA.has(id))
+  }
+
+  function ajouterLigneAuPanier(plat, modificateurs = []) {
     setPanier((p) => {
-      const existante = p.findIndex((l) => l.plat === plat.id)
+      const existante = p.findIndex((l) => l.plat === plat.id && memeSelectionModificateurs(l.modificateurs || [], modificateurs))
       if (existante === -1) {
-        return [...p, { plat: plat.id, plat_nom: plat.nom, prix: plat.prix, quantite: 1 }]
+        return [...p, { plat: plat.id, plat_nom: plat.nom, prix: plat.prix, quantite: 1, modificateurs }]
       }
       return p.map((l, i) => (i === existante ? { ...l, quantite: l.quantite + 1 } : l))
     })
+  }
+
+  function ajouterAuPanier(plat) {
+    // Un plat avec modificateurs rouvre toujours le sélecteur (jamais
+    // d'incrément aveugle sur retap) — sinon impossible de savoir quels
+    // modificateurs seraient concernés par le +1. Un plat sans
+    // modificateur garde le comportement d'origine (incrément direct).
+    if (plat.modifiers?.length > 0) {
+      setPlatPourModificateurs(plat)
+      return
+    }
+    ajouterLigneAuPanier(plat)
+  }
+
+  function confirmerModificateurs(modificateurs) {
+    ajouterLigneAuPanier(platPourModificateurs, modificateurs)
+    setPlatPourModificateurs(null)
   }
 
   function modifierQuantite(index, delta) {
@@ -112,7 +148,12 @@ export default function VenteComptoirScreen({ utilisateur, onChangerEcran, onDec
       const resCreation = await apiFetch('/api/orders/prendre-commande/', {
         method: 'POST',
         body: JSON.stringify({
-          items: panier.map(({ plat, quantite }) => ({ plat, quantite, service_immediat: true })),
+          items: panier.map(({ plat, quantite, modificateurs }) => ({
+            plat,
+            quantite,
+            service_immediat: true,
+            modificateurs,
+          })),
         }),
       })
       const commande = await resCreation.json().catch(() => ({}))
@@ -271,6 +312,14 @@ export default function VenteComptoirScreen({ utilisateur, onChangerEcran, onDec
                       {formatPrix(ligne.prix * ligne.quantite, 'XOF')}
                     </span>
                   </div>
+                  {ligne.modificateurs?.length > 0 && (
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {ligne.modificateurs
+                        .map((id) => catalogueModificateurs.find((m) => m.id === id)?.libelle)
+                        .filter(Boolean)
+                        .join(', ')}
+                    </p>
+                  )}
                   <div className="mt-1.5 flex items-center gap-1.5 rounded-full bg-slate-800 px-1 py-1 ring-1 ring-white/5">
                     <button
                       onClick={() => modifierQuantite(i, -1)}
@@ -327,6 +376,15 @@ export default function VenteComptoirScreen({ utilisateur, onChangerEcran, onDec
           )}
         </div>
       </div>
+
+      {platPourModificateurs && (
+        <SelecteurModificateursPopup
+          plat={platPourModificateurs}
+          modifiers={resoudreModificateursDuPlat(platPourModificateurs, catalogueModificateurs, catalogueCategoriesModificateurs)}
+          onConfirmer={confirmerModificateurs}
+          onFermer={() => setPlatPourModificateurs(null)}
+        />
+      )}
     </div>
   )
 }

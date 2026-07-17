@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch, logout } from './api'
 import { formatPrix } from './client/formatPrix'
+import SelecteurModificateursPopup, { resoudreModificateursDuPlat } from './SelecteurModificateurs'
 
 /**
  * Prise de commande par le personnel (§5.1/§5.6, demandé après coup) —
@@ -23,20 +24,30 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
   const [tables, setTables] = useState(null)
   const [categories, setCategories] = useState([])
   const [items, setItems] = useState([])
+  const [catalogueModificateurs, setCatalogueModificateurs] = useState([])
+  const [catalogueCategoriesModificateurs, setCatalogueCategoriesModificateurs] = useState([])
   const [tableChoisie, setTableChoisie] = useState(null)
   const [panier, setPanier] = useState([])
   const [enCours, setEnCours] = useState(false)
   const [message, setMessage] = useState(null)
+  // Plat en attente de personnalisation (§5.2) — n'ouvre le pop-up que
+  // pour un plat qui a au moins un modificateur lié ; sinon ajout direct
+  // inchangé, comme avant cette fonctionnalité.
+  const [platPourModificateurs, setPlatPourModificateurs] = useState(null)
 
   useEffect(() => {
     Promise.all([
       apiFetch('/api/tables/').then((r) => r.json()),
       apiFetch('/api/menu-categories/').then((r) => r.json()),
       apiFetch('/api/menu-items/').then((r) => r.json()),
-    ]).then(([t, c, i]) => {
+      apiFetch('/api/modifiers/').then((r) => r.json()),
+      apiFetch('/api/modifier-categories/').then((r) => r.json()),
+    ]).then(([t, c, i, m, cm]) => {
       setTables(Array.isArray(t) ? t.sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true })) : [])
       setCategories(Array.isArray(c) ? c.sort((a, b) => a.ordre_affichage - b.ordre_affichage) : [])
       setItems(Array.isArray(i) ? i : [])
+      setCatalogueModificateurs(Array.isArray(m) ? m : [])
+      setCatalogueCategoriesModificateurs(Array.isArray(cm) ? cm : [])
     })
   }, [])
 
@@ -45,11 +56,32 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
     setTimeout(() => setMessage(null), 5000)
   }
 
-  function ajouterAuPanier(plat) {
+  function ajouterLigneAuPanier(plat, modificateurs = []) {
     setPanier((p) => [
       ...p,
-      { plat: plat.id, plat_nom: plat.nom, prix: plat.prix, quantite: 1, service_immediat: true, commentaire_libre: '' },
+      {
+        plat: plat.id,
+        plat_nom: plat.nom,
+        prix: plat.prix,
+        quantite: 1,
+        service_immediat: true,
+        commentaire_libre: '',
+        modificateurs,
+      },
     ])
+  }
+
+  function ajouterAuPanier(plat) {
+    if (plat.modifiers?.length > 0) {
+      setPlatPourModificateurs(plat)
+      return
+    }
+    ajouterLigneAuPanier(plat)
+  }
+
+  function confirmerModificateurs(modificateurs) {
+    ajouterLigneAuPanier(platPourModificateurs, modificateurs)
+    setPlatPourModificateurs(null)
   }
 
   function modifierQuantite(index, delta) {
@@ -76,11 +108,12 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
         method: 'POST',
         body: JSON.stringify({
           table: tableChoisie.id,
-          items: panier.map(({ plat, quantite, service_immediat, commentaire_libre }) => ({
+          items: panier.map(({ plat, quantite, service_immediat, commentaire_libre, modificateurs }) => ({
             plat,
             quantite,
             service_immediat,
             commentaire_libre,
+            modificateurs,
           })),
         }),
       })
@@ -246,6 +279,14 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
                         {formatPrix(ligne.prix * ligne.quantite, 'XOF')}
                       </span>
                     </div>
+                    {ligne.modificateurs?.length > 0 && (
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {ligne.modificateurs
+                          .map((id) => catalogueModificateurs.find((m) => m.id === id)?.libelle)
+                          .filter(Boolean)
+                          .join(', ')}
+                      </p>
+                    )}
                     <div className="mt-1.5 flex items-center gap-2">
                       <div className="flex items-center gap-1.5 rounded-full bg-slate-900 px-1 py-1 ring-1 ring-white/5">
                         <button
@@ -294,6 +335,15 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
             </div>
           )}
         </>
+      )}
+
+      {platPourModificateurs && (
+        <SelecteurModificateursPopup
+          plat={platPourModificateurs}
+          modifiers={resoudreModificateursDuPlat(platPourModificateurs, catalogueModificateurs, catalogueCategoriesModificateurs)}
+          onConfirmer={confirmerModificateurs}
+          onFermer={() => setPlatPourModificateurs(null)}
+        />
       )}
     </div>
   )

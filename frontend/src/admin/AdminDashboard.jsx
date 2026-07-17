@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchTenant, logout } from '../api'
 import RapportsTab from './RapportsTab'
 import GestionMenu from './GestionMenu'
+import GestionModificateurs from './GestionModificateurs'
 import GestionPostes from './GestionPostes'
 import GestionTables from './GestionTables'
 import GestionUtilisateurs from './GestionUtilisateurs'
@@ -10,6 +11,7 @@ import EtablissementTab from './EtablissementTab'
 const ONGLETS = [
   { id: 'rapports', label: 'Rapports', icone: '📊', description: 'Performance & activité', Composant: RapportsTab },
   { id: 'menu', label: 'Menu', icone: '🍽️', description: 'Catégories & plats', Composant: GestionMenu },
+  { id: 'modificateurs', label: 'Modificateurs', icone: '⚙️', description: 'Catégories & options', Composant: GestionModificateurs },
   { id: 'postes', label: 'Postes', icone: '🔥', description: 'Postes de préparation', Composant: GestionPostes },
   { id: 'tables', label: 'Tables', icone: '🪑', description: 'Salle & QR codes', Composant: GestionTables },
   { id: 'utilisateurs', label: 'Équipe', icone: '👥', description: 'Comptes & accès', Composant: GestionUtilisateurs },

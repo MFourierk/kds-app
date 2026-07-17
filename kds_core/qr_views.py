@@ -107,6 +107,14 @@ class QrOrderCreateView(APIView):
                         {"items": "Un modificateur référencé n'appartient pas à cet établissement."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
+            # Catégories de modificateurs obligatoires (§5.2) — même
+            # contrôle que côté staff (`AddOrderItemLineSerializer.validate`),
+            # dupliqué ici car le flux QR anonyme n'a pas de serializer
+            # commun avec le staff (cf. docstring `QrOrderItemLineSerializer`).
+            try:
+                services.valider_modificateurs(ligne["plat"], ligne.get("modificateurs") or [])
+            except ValueError as exc:
+                return Response({"items": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         order = models.Order.objects.create(
             tenant=table.tenant,

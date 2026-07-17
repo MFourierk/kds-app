@@ -190,15 +190,21 @@ export default function ClientApp({ qrToken }) {
     amorcerAudio() // premier vrai geste utilisateur probable — débloque le son pour les notifs à venir
     setPanier((p) => {
       // Même plat + même choix "dès que prêt/avec le reste" + même
-      // commentaire = la même ligne pour le client : on additionne la
-      // quantité plutôt que d'afficher deux lignes identiques dans le
-      // panier. Un commentaire ou un choix de service différent reste
-      // volontairement une ligne à part (ce n'est plus "le même" ajout).
+      // commentaire + mêmes modificateurs = la même ligne pour le client :
+      // on additionne la quantité plutôt que d'afficher deux lignes
+      // identiques dans le panier. Un commentaire, un choix de service ou
+      // des modificateurs différents (§5.2, ex: deux cuissons distinctes
+      // de la même entrecôte) restent volontairement des lignes à part —
+      // sans les modificateurs dans cette clé, la seconde sélection
+      // remplacerait silencieusement la première.
+      const memesModificateurs = (a = [], b = []) =>
+        a.length === b.length && [...a].sort().join(',') === [...b].sort().join(',')
       const index = p.findIndex(
         (l) =>
           l.plat === ligne.plat &&
           l.service_immediat === ligne.service_immediat &&
-          l.commentaire_libre === ligne.commentaire_libre,
+          l.commentaire_libre === ligne.commentaire_libre &&
+          memesModificateurs(l.modificateurs, ligne.modificateurs),
       )
       if (index === -1) return [...p, ligne]
       const copie = [...p]
@@ -218,11 +224,12 @@ export default function ClientApp({ qrToken }) {
     // qui doit garder la même clé si elle est rejouée depuis la file
     // hors-ligne, sinon la déduplication côté serveur ne sert à rien.
     const idempotencyKey = crypto.randomUUID()
-    const items = panier.map(({ plat, quantite, service_immediat, commentaire_libre }) => ({
+    const items = panier.map(({ plat, quantite, service_immediat, commentaire_libre, modificateurs }) => ({
       plat,
       quantite,
       service_immediat,
       commentaire_libre,
+      modificateurs,
     }))
     try {
       await creerCommande(qrToken, items, idempotencyKey)
@@ -360,6 +367,9 @@ export default function ClientApp({ qrToken }) {
                 <span>
                   {ligne.quantite}× {ligne.plat_nom}
                   {!ligne.service_immediat && <span className="ml-1 text-xs text-gray-400">(avec le reste)</span>}
+                  {ligne.modificateurs_libelles?.length > 0 && (
+                    <span className="ml-1 text-xs text-gray-400">({ligne.modificateurs_libelles.join(', ')})</span>
+                  )}
                 </span>
                 <button onClick={() => retirerDuPanier(index)} className="text-red-500">
                   ✕

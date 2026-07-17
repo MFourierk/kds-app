@@ -3,6 +3,45 @@ from django.utils import timezone
 from . import models
 
 
+def valider_modificateurs(plat, modificateurs):
+    """
+    Fait respecter les catégories de modificateurs obligatoires (§5.2,
+    demandé après coup — "dès qu'un client clique sur Entrecôte, le POS
+    doit l'obliger à choisir une cuisson"). Volontairement côté serveur,
+    pas seulement dans l'écran (`SelecteurModificateurs.jsx`) : un vieux
+    frontend en cache, ou l'intégration POS tierce
+    (`PosOrderCreateView`), pourrait sinon contourner la contrainte —
+    pour un plat mal cuit, une simple validation d'interface ne suffit
+    pas. Partagée entre `AddOrderItemLineSerializer.validate` (staff) et
+    `QrOrderCreateView` (client QR, qui n'a pas de serializer commun avec
+    le staff, cf. note dans `serializers.py`).
+
+    Lève `ValueError(message)` si un modificateur soumis n'appartient pas
+    au plat, ou si une catégorie obligatoire représentée parmi les
+    modificateurs *disponibles* pour ce plat n'a aucune sélection parmi
+    les modificateurs *soumis*.
+    """
+
+    modificateurs = list(modificateurs)
+    modificateurs_disponibles = list(plat.modifiers.select_related("categorie"))
+    ids_disponibles = {m.id for m in modificateurs_disponibles}
+
+    for modificateur in modificateurs:
+        if modificateur.id not in ids_disponibles:
+            raise ValueError(f"« {modificateur.libelle} » ne fait pas partie des modificateurs de « {plat.nom} ».")
+
+    ids_soumis = {m.id for m in modificateurs}
+    categories_obligatoires_disponibles = {
+        m.categorie for m in modificateurs_disponibles if m.categorie_id and m.categorie.obligatoire
+    }
+    for categorie in categories_obligatoires_disponibles:
+        options_de_la_categorie = {
+            m.id for m in modificateurs_disponibles if m.categorie_id == categorie.id
+        }
+        if not (options_de_la_categorie & ids_soumis):
+            raise ValueError(f"« {plat.nom} » nécessite un choix dans la catégorie « {categorie.nom} ».")
+
+
 def route_items_to_tickets(order, items):
     """
     Routage intelligent partagé (§5.1) : route chaque ligne

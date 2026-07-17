@@ -5,7 +5,7 @@ import { formatPrix } from '../client/formatPrix'
 import { Badge, BoutonLien, BoutonPrimaire, BoutonSecondaire, Carte, Champ, classeInput, Ligne, Table } from './ui'
 
 const CAT_VIDE = { nom: '', station: '', ordre_affichage: 0 }
-const PLAT_VIDE = { nom: '', categorie: '', station: '', prix: '', temps_preparation_estime_min: 10, image: '', imageFile: null }
+const PLAT_VIDE = { nom: '', categorie: '', station: '', prix: '', temps_preparation_estime_min: 10, image: '', imageFile: null, modifiers: [] }
 
 function SectionCategories({ categories, stations, recharger, setErreur }) {
   const [form, setForm] = useState(null)
@@ -121,13 +121,22 @@ function SectionCategories({ categories, stations, recharger, setErreur }) {
   )
 }
 
-function SectionPlats({ plats, categories, stations, recharger, setErreur }) {
+function SectionPlats({ plats, categories, stations, modificateurs, categoriesModificateurs, recharger, setErreur }) {
   const [form, setForm] = useState(null)
   const [enCours, setEnCours] = useState(false)
 
   function choisirCategorie(categorieId) {
     const cat = categories.find((c) => c.id === categorieId)
     setForm({ ...form, categorie: categorieId, station: cat?.station ?? form.station })
+  }
+
+  function toggleModificateur(modificateurId) {
+    setForm((f) => ({
+      ...f,
+      modifiers: f.modifiers.includes(modificateurId)
+        ? f.modifiers.filter((id) => id !== modificateurId)
+        : [...f.modifiers, modificateurId],
+    }))
   }
 
   async function enregistrer(event) {
@@ -151,6 +160,10 @@ function SectionPlats({ plats, categories, stations, recharger, setErreur }) {
         corps.append('prix', form.prix)
         corps.append('temps_preparation_estime_min', Number(form.temps_preparation_estime_min) || 0)
         corps.append('image', form.imageFile)
+        // Une entrée répétée par modificateur (pas de tableau JSON possible
+        // en `multipart/form-data`) — le parser multipart de DRF regroupe
+        // les valeurs répétées d'une même clé pour un champ M2M.
+        form.modifiers.forEach((id) => corps.append('modifiers', id))
       } else {
         corps = {
           nom: form.nom,
@@ -158,6 +171,7 @@ function SectionPlats({ plats, categories, stations, recharger, setErreur }) {
           station: form.station,
           prix: form.prix,
           temps_preparation_estime_min: Number(form.temps_preparation_estime_min) || 0,
+          modifiers: form.modifiers,
         }
       }
       if (form.id) await modifier('menu-items', form.id, corps)
@@ -302,6 +316,38 @@ function SectionPlats({ plats, categories, stations, recharger, setErreur }) {
                 </div>
               </Champ>
             </div>
+
+            {categoriesModificateurs.length > 0 && (
+              <Champ label="Modificateurs applicables">
+                <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+                  {categoriesModificateurs.map((cat) => {
+                    const optionsDeLaCategorie = modificateurs.filter((m) => m.categorie === cat.id)
+                    if (optionsDeLaCategorie.length === 0) return null
+                    return (
+                      <div key={cat.id}>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          {cat.nom}
+                          {cat.obligatoire && <span className="ml-1.5 text-red-600">(choix obligatoire à la commande)</span>}
+                        </p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                          {optionsDeLaCategorie.map((m) => (
+                            <label key={m.id} className="flex items-center gap-1.5 text-sm text-gray-700">
+                              <input
+                                type="checkbox"
+                                checked={form.modifiers.includes(m.id)}
+                                onChange={() => toggleModificateur(m.id)}
+                              />
+                              {m.libelle}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </Champ>
+            )}
+
             <div className="flex gap-2">
               <BoutonPrimaire type="submit" disabled={enCours}>
                 Enregistrer
@@ -369,27 +415,47 @@ export default function GestionMenu() {
   const [categories, setCategories] = useState(null)
   const [plats, setPlats] = useState(null)
   const [stations, setStations] = useState(null)
+  const [modificateurs, setModificateurs] = useState(null)
+  const [categoriesModificateurs, setCategoriesModificateurs] = useState(null)
   const [erreur, setErreur] = useState('')
 
   function recharger() {
-    Promise.all([lister('menu-categories'), lister('menu-items'), lister('stations')])
-      .then(([cats, items, stas]) => {
+    Promise.all([
+      lister('menu-categories'),
+      lister('menu-items'),
+      lister('stations'),
+      lister('modifiers'),
+      lister('modifier-categories'),
+    ])
+      .then(([cats, items, stas, mods, catsMods]) => {
         setCategories(cats)
         setPlats(items)
         setStations(stas)
+        setModificateurs(mods)
+        setCategoriesModificateurs(catsMods)
       })
       .catch((e) => setErreur(e.message))
   }
 
   useEffect(recharger, [])
 
-  if (!categories || !plats || !stations) return <p className="text-gray-400">Chargement...</p>
+  if (!categories || !plats || !stations || !modificateurs || !categoriesModificateurs) {
+    return <p className="text-gray-400">Chargement...</p>
+  }
 
   return (
     <div className="space-y-8">
       {erreur && <div className="rounded-xl bg-red-100 p-4 text-sm font-semibold text-red-800">{erreur}</div>}
       <SectionCategories categories={categories} stations={stations} recharger={recharger} setErreur={setErreur} />
-      <SectionPlats plats={plats} categories={categories} stations={stations} recharger={recharger} setErreur={setErreur} />
+      <SectionPlats
+        plats={plats}
+        categories={categories}
+        stations={stations}
+        modificateurs={modificateurs}
+        categoriesModificateurs={categoriesModificateurs}
+        recharger={recharger}
+        setErreur={setErreur}
+      />
     </div>
   )
 }

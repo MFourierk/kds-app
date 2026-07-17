@@ -176,8 +176,13 @@ class MenuCategoryViewSet(ProtectedDeleteMixin, ManagerWriteMixin, TenantScopedV
     serializer_class = serializers.MenuCategorySerializer
 
 
+class ModifierCategoryViewSet(ProtectedDeleteMixin, ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelViewSet):
+    queryset = models.ModifierCategory.objects.all()
+    serializer_class = serializers.ModifierCategorySerializer
+
+
 class ModifierViewSet(ManagerWriteMixin, TenantScopedViewSetMixin, viewsets.ModelViewSet):
-    queryset = models.Modifier.objects.all()
+    queryset = models.Modifier.objects.select_related("categorie").all()
     serializer_class = serializers.ModifierSerializer
 
 

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from . import models
+from . import models, services
 
 
 class TenantScopedFieldsMixin:
@@ -102,7 +102,16 @@ class MenuCategorySerializer(TenantScopedSerializer):
         read_only_fields = ["id", "tenant"]
 
 
+class ModifierCategorySerializer(TenantScopedSerializer):
+    class Meta:
+        model = models.ModifierCategory
+        fields = ["id", "tenant", "nom", "obligatoire", "selection_multiple", "ordre_affichage"]
+        read_only_fields = ["id", "tenant"]
+
+
 class ModifierSerializer(TenantScopedSerializer):
+    categorie_nom = serializers.SerializerMethodField()
+
     class Meta:
         model = models.Modifier
         fields = [
@@ -110,10 +119,15 @@ class ModifierSerializer(TenantScopedSerializer):
             "tenant",
             "libelle",
             "type_modifier",
+            "categorie",
+            "categorie_nom",
             "niveau_alerte_critique",
             "prix_supplement",
         ]
         read_only_fields = ["id", "tenant"]
+
+    def get_categorie_nom(self, obj):
+        return obj.categorie.nom if obj.categorie else None
 
 
 class MenuItemSerializer(TenantScopedSerializer):
@@ -443,6 +457,17 @@ class AddOrderItemLineSerializer(TenantScopedFieldsMixin, serializers.Serializer
     )
     commentaire_libre = serializers.CharField(required=False, allow_blank=True, default="")
 
+    def validate(self, data):
+        # Catégories de modificateurs obligatoires (§5.2) — cf.
+        # `services.valider_modificateurs`. S'applique à `StaffOrderCreateSerializer`
+        # (prise de commande staff) et `AddOrderItemsSerializer` (add-items),
+        # qui héritent/utilisent cette classe.
+        try:
+            services.valider_modificateurs(data["plat"], data["modificateurs"])
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
+        return data
+
 
 class AddOrderItemsSerializer(serializers.Serializer):
     """
@@ -569,7 +594,43 @@ class QrTenantBrandingSerializer(serializers.ModelSerializer):
         ]
 
 
+class QrModifierSerializer(serializers.ModelSerializer):
+    """
+    Détails complets d'un modificateur imbriqués directement (id +
+    catégorie déjà résolue) — le client QR est anonyme (`AllowAny`), pas
+    d'appel authentifié possible pour résoudre les IDs après coup, cf.
+    `QrMenuItemSerializer`.
+    """
+
+    categorie_nom = serializers.SerializerMethodField()
+    categorie_obligatoire = serializers.SerializerMethodField()
+    categorie_selection_multiple = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.Modifier
+        fields = [
+            "id",
+            "libelle",
+            "prix_supplement",
+            "categorie",
+            "categorie_nom",
+            "categorie_obligatoire",
+            "categorie_selection_multiple",
+        ]
+
+    def get_categorie_nom(self, obj):
+        return obj.categorie.nom if obj.categorie else None
+
+    def get_categorie_obligatoire(self, obj):
+        return obj.categorie.obligatoire if obj.categorie else False
+
+    def get_categorie_selection_multiple(self, obj):
+        return obj.categorie.selection_multiple if obj.categorie else False
+
+
 class QrMenuItemSerializer(serializers.ModelSerializer):
+    modifiers = QrModifierSerializer(many=True, read_only=True)
+
     class Meta:
         model = models.MenuItem
         fields = [
@@ -580,6 +641,7 @@ class QrMenuItemSerializer(serializers.ModelSerializer):
             "image",
             "allergenes",
             "regimes",
+            "modifiers",
         ]
 
 
