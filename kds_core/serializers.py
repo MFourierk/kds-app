@@ -483,12 +483,13 @@ class AddOrderItemsSerializer(serializers.Serializer):
 class StaffOrderItemLineSerializer(AddOrderItemLineSerializer):
     """
     Comme `AddOrderItemLineSerializer`, avec en plus le choix "servir dès
-    que prêt / avec le reste" (§5.1/§5.6) — le client QR peut déjà le
-    choisir plat par plat ; un serveur qui prend la commande à la place
-    du client doit pouvoir lui poser la même question.
+    que prêt / avec le reste / à la fin" (§5.1/§5.6) — le client QR peut
+    déjà le choisir plat par plat ; un serveur qui prend la commande à la
+    place du client doit pouvoir lui poser la même question.
     """
 
     service_immediat = serializers.BooleanField(default=True)
+    servir_en_dernier = serializers.BooleanField(default=False)
 
 
 class StaffOrderCreateSerializer(TenantScopedFieldsMixin, serializers.Serializer):
@@ -697,6 +698,15 @@ class QrOrderItemLineSerializer(serializers.Serializer):
             "§5.6 : True = servir dès que prêt (défaut). False = servir avec le "
             "reste de la commande — le plat part en cuisine retenu (Fire/Hold) et "
             "se libère automatiquement quand tout le reste est prêt."
+        ),
+    )
+    servir_en_dernier = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text=(
+            "§5.6 : sans effet si service_immediat est vrai. Sinon, True = "
+            "\"à la fin\" — attend que TOUT le reste (immédiat + avec le reste) "
+            "soit prêt, pas seulement les tickets non retenus."
         ),
     )
 

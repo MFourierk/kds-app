@@ -13,12 +13,14 @@ import SelecteurModificateursPopup, { resoudreModificateursDuPlat } from './Sele
  * que le reste des écrans staff (référence "ResolvPOS" fournie pour la
  * mise en page uniquement, pas la palette).
  *
- * Deux usages, deux montages :
- * - `embarque` (onglet "Vente comptoir" de `CaisseScreen`, manager/admin) :
- *   pas d'en-tête propre, celui de `CaisseScreen` suffit déjà.
- * - Autonome (rôle caissier·ère, `App.jsx`) : en-tête complet, écran
- *   verrouillé (`onChangerEcran` toujours `undefined` dans ce cas — même
- *   mécanique que le verrouillage par poste cuisine).
+ * Toujours `embarque` désormais (onglet "Vente comptoir" de
+ * `CaisseScreen`, y compris pour la caissière — elle atterrit sur
+ * `CaisseScreen` verrouillé plutôt que directement ici, cf. `App.jsx`,
+ * pour pouvoir aussi encaisser les commandes de table) : pas d'en-tête
+ * propre, celui de `CaisseScreen` suffit déjà. Le montage autonome
+ * (`embarque=false`) reste supporté par ce composant mais n'est plus
+ * utilisé nulle part — laissé au cas où un futur usage isolé en aurait
+ * besoin.
  *
  * Toujours `service_immediat: true` sur chaque ligne — pas de "poste
  * cuisine vs reste de la commande" à arbitrer pour un achat comptoir,

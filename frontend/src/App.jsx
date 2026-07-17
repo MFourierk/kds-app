@@ -79,9 +79,16 @@ function App() {
       // Caissier·ère (§TPE) : un seul écran, jamais de sélecteur — même
       // mécanique de verrouillage que le poste cuisine ci-dessous, mais
       // basée sur le rôle plutôt que sur `station_assignee` (elle n'a pas
-      // de poste de préparation).
+      // de poste de préparation). Route vers `CaisseScreen` (pas
+      // directement `VenteComptoirScreen`) : demandé après coup — elle
+      // doit aussi pouvoir encaisser les commandes de table, pas
+      // seulement la vente comptoir. `CaisseScreen` sait déjà afficher
+      // les deux onglets pour qui a `PeutEncaisser` (backend, déjà vrai
+      // pour ce rôle) ; ouvre sur "Vente comptoir" par défaut (son usage
+      // principal), l'onglet "Commandes de table" reste accessible en un
+      // tap plutôt que caché.
       if (moi.role === 'caissier') {
-        setEcran({ scopeId: 'comptoir', titre: 'Vente comptoir' })
+        setEcran({ scopeId: 'caisse', titre: 'Caisse' })
         setEcranVerrouille(true)
         return
       }
@@ -149,7 +156,8 @@ function App() {
     contenu = (
       <CaisseScreen
         utilisateur={utilisateur}
-        onChangerEcran={() => setEcran('selection')}
+        onChangerEcran={ecranVerrouille ? undefined : () => setEcran('selection')}
+        ongletParDefaut={utilisateur?.role === 'caissier' ? 'comptoir' : 'tables'}
         onDeconnexion={() => setConnecte(false)}
       />
     )

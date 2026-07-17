@@ -107,6 +107,14 @@ async function refreshAccessToken() {
   return updated.access
 }
 
+// Trouvé en usage réel côté client QR (§clientApi.js, même cause ici) :
+// un `fetch` sans délai maximum peut rester en attente indéfiniment sur
+// une connexion qui se dégrade en cours de route — un bouton "Envoi..."/
+// "Encaisser..." restait bloqué pour toujours. Délai généreux (le staff
+// est sur le WiFi du restaurant, en principe plus stable qu'un 4G client,
+// mais pas à l'abri d'un routeur qui rame).
+const DELAI_MAX_MS = 15000
+
 /**
  * Appel HTTP authentifié : rejoue une fois l'appel après rafraîchissement
  * du token en cas de 401 (access token expiré, cf. durée de vie courte —
@@ -119,15 +127,19 @@ export async function apiFetch(path, options = {}) {
   // cas, sinon le navigateur n'ajoute plus lui-même le boundary
   // multipart et la requête arrive illisible côté serveur.
   const estFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
-  const doFetch = (accessToken) =>
-    fetch(`${API_BASE_URL}${path}`, {
+  const doFetch = (accessToken) => {
+    const controleur = new AbortController()
+    const minuteur = setTimeout(() => controleur.abort(), DELAI_MAX_MS)
+    return fetch(`${API_BASE_URL}${path}`, {
       ...options,
+      signal: controleur.signal,
       headers: {
         ...(estFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...options.headers,
       },
-    })
+    }).finally(() => clearTimeout(minuteur))
+  }
 
   let response = await doFetch(tokens?.access)
   if (response.status === 401) {

@@ -45,24 +45,35 @@ def valider_modificateurs(plat, modificateurs):
 def route_items_to_tickets(order, items):
     """
     Routage intelligent partagé (§5.1) : route chaque ligne
-    `{plat, quantite, modificateurs, commentaire_libre, service_immediat}`
-    vers le ticket actif du poste concerné d'après `MenuItem.station` —
-    créé s'il n'en existe pas déjà un pour ce poste sur cette commande
-    (réutilisation d'un ticket existant tant qu'il n'est pas `servi`).
+    `{plat, quantite, modificateurs, commentaire_libre, service_immediat,
+    servir_en_dernier}` vers le ticket actif du poste concerné d'après
+    `MenuItem.station` — créé s'il n'en existe pas déjà un pour ce poste
+    sur cette commande (réutilisation d'un ticket existant tant qu'il
+    n'est pas `servi`).
 
     `service_immediat` (défaut `True`, ignoré si absent — staff/POS
     n'exposent pas ce choix) : §5.6 "servir maintenant" vs "servir avec le
     reste". Un plat marqué `False` part sur un ticket **retenu**
     (`is_held=True`), même s'il partage le même poste qu'un plat immédiat
-    — d'où le regroupement par (poste, retenu) et non plus par poste seul.
-    Retenu ne veut pas dire invisible : le ticket apparaît normalement sur
-    son poste (avec un bouton "Lancer" plutôt que le bump habituel, cf.
-    `TicketCard.jsx`), pour que la cuisine puisse quand même le préparer
-    en parallèle — sinon un plat lent marqué "avec le reste" ne
-    commencerait jamais à cuire avant que le reste soit déjà prêt. Le
-    ticket retenu se libère automatiquement quand le reste de la commande
-    est prêt (cf. `signals.py::_auto_fire_tickets_retenus_si_reste_pret`),
-    ou peut être lancé manuellement avant ça.
+    — d'où le regroupement par (poste, retenu, en_dernier) et non plus
+    par poste seul. Retenu ne veut pas dire invisible : le ticket
+    apparaît normalement sur son poste (avec un bouton "Lancer" plutôt
+    que le bump habituel, cf. `TicketCard.jsx`), pour que la cuisine
+    puisse quand même le préparer en parallèle — sinon un plat lent
+    marqué "avec le reste" ne commencerait jamais à cuire avant que le
+    reste soit déjà prêt. Le ticket retenu se libère automatiquement
+    quand le reste de la commande est prêt (cf.
+    `signals.py::_auto_fire_tickets_retenus_si_reste_pret`), ou peut être
+    lancé manuellement avant ça.
+
+    `servir_en_dernier` (défaut `False`, sans effet si `service_immediat`
+    est vrai — §5.6, "À la fin", demandé après coup en plus de "dès que
+    prêt"/"avec le reste" : ex: un dessert qui doit arriver après tout le
+    reste, MÊME après les plats "avec le reste") : un raffinement de
+    "retenu", pas une troisième valeur indépendante — d'où le
+    regroupement par (poste, retenu, en_dernier) plutôt que
+    (poste, moment) à plat, qui aurait autorisé la combinaison
+    incohérente "immédiat ET en dernier".
 
     Partagé entre `OrderViewSet.add_items` (staff, JWT), `PosOrderCreateView`
     (caisse tierce, clé API) et `QrOrderCreateView` (client, §5.6) pour ne
@@ -76,12 +87,13 @@ def route_items_to_tickets(order, items):
         plat = ligne["plat"]
         station = plat.station
         retenu = not ligne.get("service_immediat", True)
-        cle = (station.id, retenu)
+        en_dernier = retenu and bool(ligne.get("servir_en_dernier", False))
+        cle = (station.id, retenu, en_dernier)
 
         ticket = tickets_par_cle.get(cle)
         if ticket is None:
             ticket = (
-                order.tickets.filter(station=station, is_held=retenu)
+                order.tickets.filter(station=station, is_held=retenu, en_dernier=en_dernier)
                 .exclude(statut__in=TICKETS_NON_REUTILISABLES)
                 .first()
             )
@@ -91,6 +103,7 @@ def route_items_to_tickets(order, items):
                 order=order,
                 station=station,
                 is_held=retenu,
+                en_dernier=en_dernier,
                 heure_envoi_poste=None if retenu else timezone.now(),
             )
         item = models.OrderItem.objects.create(

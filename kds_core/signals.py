@@ -296,44 +296,71 @@ def _sync_order_statut(order):
 def _auto_fire_tickets_retenus_si_reste_pret(order):
     """
     Fire/Hold choisi par le client à la commande (§5.1/§5.6) : un plat
-    marqué "servir avec le reste" part en cuisine retenu (`is_held=True`)
-    — visible sur son poste dès la création (cf. `_broadcast`), avec un
-    bouton "Lancer" (la cuisine garde la main pour le démarrer plus tôt,
-    ex: un plat lent qu'il vaut mieux ne pas attendre), mais pas encore
-    "en préparation" tant que personne ne l'a lancé. Dès que TOUS les
-    autres tickets de la commande (non retenus, non annulés) sont prêts
-    ou servis, les tickets encore retenus se lancent automatiquement —
-    sans action du client ni du staff : c'est ce qui doit "mettre le
-    client à l'aise" plutôt que de le faire réclamer ou attendre une
-    action côté service.
+    marqué "servir avec le reste" ou "à la fin" part en cuisine retenu
+    (`is_held=True`) — visible sur son poste dès la création (cf.
+    `_broadcast`), avec un bouton "Lancer" (la cuisine garde la main pour
+    le démarrer plus tôt, ex: un plat lent qu'il vaut mieux ne pas
+    attendre), mais pas encore "en préparation" tant que personne ne l'a
+    lancé. Deux paliers de libération automatique, sans action du client
+    ni du staff — c'est ce qui doit "mettre le client à l'aise" plutôt
+    que de le faire réclamer ou attendre une action côté service :
 
-    Cas limite important : si la commande ne contient QUE des plats
-    retenus (aucun plat "immédiat" à côté), il n'y a littéralement rien
-    à attendre — le ticket doit alors se lancer tout de suite, pas rester
-    bloqué indéfiniment. `tickets_non_retenus.exclude(...).exists()` sur
-    une queryset déjà vide vaut `False`, donc `tout_pret` est naturellement
-    `True` dans ce cas : aucun garde-fou "rien à comparer" à ajouter ici,
-    ç'a été une vraie régression une première fois (cf. historique).
+    1. "Avec le reste" (`en_dernier=False`) se lance dès que TOUS les
+       tickets immédiats (`is_held=False`) de la commande sont prêts ou
+       servis — comportement d'origine, inchangé.
+    2. "À la fin" (`en_dernier=True`, demandé après coup — ex: un dessert
+       qui doit arriver après tout le reste) se lance seulement une fois
+       TOUT LE RESTE de la commande (immédiat + "avec le reste", donc
+       APRÈS le palier 1) prêt ou servi — pas seulement les tickets
+       jamais retenus.
+
+    Cas limite important, dans les deux paliers : si le sous-ensemble à
+    comparer est vide (ex: une commande ne contenant QUE des plats "à la
+    fin", ou que des plats "avec le reste"/"à la fin" sans rien
+    d'immédiat), il n'y a littéralement rien à attendre — le palier
+    concerné se lance alors tout de suite, pas de blocage indéfini.
+    `queryset_vide.exclude(...).exists()` vaut `False`, donc "prêt" est
+    naturellement `True` dans ce cas : aucun garde-fou "rien à comparer"
+    à ajouter, ç'a été une vraie régression une première fois pour le
+    palier 1 (cf. historique) — même raisonnement appliqué au palier 2.
 
     Appelé à chaque sauvegarde de ticket : la fonction est idempotente
-    (ne fait rien si aucun ticket n'est plus retenu ou si le reste n'est
-    pas encore prêt), donc être appelée "trop souvent" est sans risque.
+    (ne fait rien si aucun ticket n'est plus retenu ou si le palier
+    concerné n'est pas encore prêt), donc être appelée "trop souvent" est
+    sans risque.
     """
 
     if order.statut == Order.Statut.ANNULEE:
         return
 
-    if not order.tickets.filter(is_held=True).exclude(statut=OrderTicket.Statut.ANNULE).exists():
+    tickets_retenus = order.tickets.filter(is_held=True).exclude(statut=OrderTicket.Statut.ANNULE)
+    if not tickets_retenus.exists():
         return  # rien de retenu, rien à faire
 
-    tickets_non_retenus = order.tickets.filter(is_held=False).exclude(statut=OrderTicket.Statut.ANNULE)
-    tout_pret = not tickets_non_retenus.exclude(
+    # Palier 1 — "avec le reste" : attend les tickets immédiats.
+    tickets_immediats = order.tickets.filter(is_held=False).exclude(statut=OrderTicket.Statut.ANNULE)
+    immediats_prets = not tickets_immediats.exclude(
         statut__in=[OrderTicket.Statut.PRET, OrderTicket.Statut.SERVI]
     ).exists()
-    if not tout_pret:
-        return
+    if immediats_prets:
+        for ticket in tickets_retenus.filter(en_dernier=False):
+            ticket.is_held = False
+            ticket.heure_envoi_poste = timezone.now()
+            ticket.save()
 
-    for ticket in order.tickets.filter(is_held=True).exclude(statut=OrderTicket.Statut.ANNULE):
-        ticket.is_held = False
-        ticket.heure_envoi_poste = timezone.now()
-        ticket.save()
+    # Palier 2 — "à la fin" : attend TOUT le reste (immédiat + "avec le
+    # reste"), donc naturellement après le palier 1 ci-dessus — au moment
+    # précis où le palier 1 vient de lancer un ticket, son statut est
+    # encore `en_attente` (pas encore `pret`/`servi`), donc ce palier ne
+    # se déclenchera qu'à un appel ultérieur de cette fonction (au
+    # prochain changement de statut de ce ticket) : pas de faux-départ
+    # simultané des deux paliers.
+    tickets_pas_en_dernier = order.tickets.exclude(en_dernier=True).exclude(statut=OrderTicket.Statut.ANNULE)
+    reste_pret = not tickets_pas_en_dernier.exclude(
+        statut__in=[OrderTicket.Statut.PRET, OrderTicket.Statut.SERVI]
+    ).exists()
+    if reste_pret:
+        for ticket in tickets_retenus.filter(en_dernier=True):
+            ticket.is_held = False
+            ticket.heure_envoi_poste = timezone.now()
+            ticket.save()

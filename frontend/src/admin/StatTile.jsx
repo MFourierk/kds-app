@@ -1,5 +1,5 @@
 /** Contrat "stat tile" (skill dataviz) : label en phrase, valeur en gras. Icône + accent coloré pour sortir du gris plat. */
-export default function StatTile({ label, value, icone, accent = 'slate' }) {
+export default function StatTile({ label, value, icone, accent = 'slate', description }) {
   const ACCENTS = {
     slate: 'from-slate-500 to-slate-700',
     amber: 'from-amber-400 to-amber-600',
@@ -18,6 +18,10 @@ export default function StatTile({ label, value, icone, accent = 'slate' }) {
       <p className="mt-2 text-3xl font-bold tracking-tight text-gray-900" style={{ fontVariantNumeric: 'proportional-nums' }}>
         {value}
       </p>
+      {/* Optionnel : quelques chiffres (ex: "Montant perdu") ne sont pas
+          auto-explicatifs par leur seul libellé — précision courte plutôt
+          qu'un tooltip, toujours visible sans interaction (§tactile). */}
+      {description && <p className="mt-1 pr-14 text-xs text-gray-400">{description}</p>}
     </div>
   )
 }

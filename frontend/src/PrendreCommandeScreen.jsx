@@ -65,6 +65,7 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
         prix: plat.prix,
         quantite: 1,
         service_immediat: true,
+        servir_en_dernier: false,
         commentaire_libre: '',
         modificateurs,
       },
@@ -92,8 +93,19 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
     )
   }
 
-  function toggleServiceImmediat(index) {
-    setPanier((p) => p.map((ligne, i) => (i === index ? { ...ligne, service_immediat: !ligne.service_immediat } : ligne)))
+  // Cycle "Dès que prêt" → "Avec le reste" → "À la fin" → ... (§5.6,
+  // "à la fin" ajouté après coup) — un tap répété sur la même puce,
+  // plutôt qu'un sélecteur séparé, pour rester compact dans la liste du
+  // panier.
+  function cyclerMomentService(index) {
+    setPanier((p) =>
+      p.map((ligne, i) => {
+        if (i !== index) return ligne
+        if (ligne.service_immediat) return { ...ligne, service_immediat: false, servir_en_dernier: false }
+        if (!ligne.servir_en_dernier) return { ...ligne, servir_en_dernier: true }
+        return { ...ligne, service_immediat: true, servir_en_dernier: false }
+      })
+    )
   }
 
   function retirerDuPanier(index) {
@@ -108,10 +120,11 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
         method: 'POST',
         body: JSON.stringify({
           table: tableChoisie.id,
-          items: panier.map(({ plat, quantite, service_immediat, commentaire_libre, modificateurs }) => ({
+          items: panier.map(({ plat, quantite, service_immediat, servir_en_dernier, commentaire_libre, modificateurs }) => ({
             plat,
             quantite,
             service_immediat,
+            servir_en_dernier,
             commentaire_libre,
             modificateurs,
           })),
@@ -304,12 +317,12 @@ export default function PrendreCommandeScreen({ onChangerEcran, onDeconnexion })
                         </button>
                       </div>
                       <button
-                        onClick={() => toggleServiceImmediat(i)}
+                        onClick={() => cyclerMomentService(i)}
                         className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
                           ligne.service_immediat ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-400'
                         }`}
                       >
-                        {ligne.service_immediat ? '⚡ Dès que prêt' : '⏳ Avec le reste'}
+                        {ligne.service_immediat ? '⚡ Dès que prêt' : ligne.servir_en_dernier ? '🏁 À la fin' : '⏳ Avec le reste'}
                       </button>
                       <button
                         onClick={() => retirerDuPanier(i)}

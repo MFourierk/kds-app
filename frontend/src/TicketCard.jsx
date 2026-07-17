@@ -25,7 +25,10 @@ export default function TicketCard({ ticket, onBump, onFire, onToggleRush, onLig
   // "marquer prêt" globalement : il ne fait que Démarrer / Lancer /
   // Marquer servi, jamais sauter l'étape ligne par ligne.
   const lignesActives = ticket.lignes.filter((l) => l.statut_ligne !== 'annule')
-  const nbPretes = lignesActives.filter((l) => l.statut_ligne === 'pret').length
+  // "servi" compte comme "prêt" ici (déjà au-delà) — sinon une ligne
+  // servie individuellement avant les autres ferait *baisser* le
+  // compteur "X/Y prêts" au lieu de rester à jour.
+  const nbPretes = lignesActives.filter((l) => l.statut_ligne === 'pret' || l.statut_ligne === 'servi').length
   const enPreparation = !ticket.is_held && ticket.statut === 'en_preparation'
 
   return (
@@ -62,10 +65,18 @@ export default function TicketCard({ ticket, onBump, onFire, onToggleRush, onLig
         {ticket.lignes.map((ligne) => {
           const estPrete = ligne.statut_ligne === 'pret'
           const estAnnulee = ligne.statut_ligne === 'annule'
+          // Une ligne peut passer "servi" individuellement (écran Service
+          // dédié, §5.6 "dès que prêt" — cf. `ServeurScreen.jsx`) alors
+          // que le ticket lui-même reste "en préparation" (d'autres
+          // lignes pas encore prêtes) — trouvé en usage réel : sans cet
+          // état séparé, une ligne déjà servie retombait dans le même
+          // rendu qu'une ligne pas encore prête (bouton "Prêt" cliquable),
+          // aucun moyen de voir qu'elle était en fait déjà sortie.
+          const estServie = ligne.statut_ligne === 'servi'
           return (
             <li
               key={ligne.id}
-              className={`rounded-lg p-2 ${estPrete ? 'bg-emerald-950' : 'bg-slate-900'}`}
+              className={`rounded-lg p-2 ${estServie ? 'bg-slate-800/60 opacity-60' : estPrete ? 'bg-emerald-950' : 'bg-slate-900'}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1">
@@ -87,18 +98,25 @@ export default function TicketCard({ ticket, onBump, onFire, onToggleRush, onLig
                     </span>
                   ))}
                 </div>
-                {enPreparation && !estAnnulee && (
-                  <button
-                    onClick={() => onLignePrete(ligne.id)}
-                    disabled={estPrete}
-                    className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${
-                      estPrete
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-slate-700 text-slate-200 hover:bg-emerald-500 hover:text-slate-900'
-                    }`}
-                  >
-                    {estPrete ? '✓ Prêt' : 'Prêt'}
-                  </button>
+                {estServie ? (
+                  <span className="shrink-0 rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-slate-400">
+                    ✓ Servi
+                  </span>
+                ) : (
+                  enPreparation &&
+                  !estAnnulee && (
+                    <button
+                      onClick={() => onLignePrete(ligne.id)}
+                      disabled={estPrete}
+                      className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${
+                        estPrete
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-700 text-slate-200 hover:bg-emerald-500 hover:text-slate-900'
+                      }`}
+                    >
+                      {estPrete ? '✓ Prêt' : 'Prêt'}
+                    </button>
+                  )
                 )}
               </div>
             </li>

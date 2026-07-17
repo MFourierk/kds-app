@@ -8,15 +8,31 @@ export const MESSAGE_HORS_LIGNE = 'Connexion indisponible, Veuillez appeler un s
 /** Distingue une vraie panne réseau (fetch qui n'aboutit jamais) d'une erreur HTTP normale. */
 export class ErreurReseau extends Error {}
 
+// Trouvé en usage réel (client sur son propre WiFi/4G, pas le réseau
+// fiable du poste de dev) : `fetch` sans délai maximum peut rester en
+// attente indéfiniment sur une connexion qui se dégrade en cours de
+// route (pas de coupure nette, donc pas d'erreur réseau immédiate) — le
+// bouton "Envoi..." restait bloqué pour toujours, `finally` n'étant
+// jamais atteint puisque la promesse ne se résolvait ni ne rejetait
+// jamais. `AbortController` force un abandon après `DELAI_MAX_MS`,
+// traité comme une `ErreurReseau` normale : la commande part alors dans
+// la file hors-ligne existante (§5.5) plutôt que de bloquer l'écran.
+const DELAI_MAX_MS = 12000
+
 async function qrFetch(path, options = {}) {
   let response
+  const controleur = new AbortController()
+  const minuteur = setTimeout(() => controleur.abort(), DELAI_MAX_MS)
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: { 'Content-Type': 'application/json', ...options.headers },
+      signal: controleur.signal,
     })
   } catch {
     throw new ErreurReseau(MESSAGE_HORS_LIGNE)
+  } finally {
+    clearTimeout(minuteur)
   }
   return response
 }

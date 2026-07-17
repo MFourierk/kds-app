@@ -2,9 +2,20 @@ import { useState } from 'react'
 import PlatCard from './PlatCard'
 import { GroupesModificateurs, categoriesObligatoiresManquantes, groupesDepuisModificateurs } from '../SelecteurModificateurs'
 
+// "À la fin" (§5.6, demandé après coup en plus de "dès que prêt"/"avec
+// le reste" — ex: un dessert qui doit arriver après tout le reste, même
+// après un plat "avec le reste") : un raffinement de "pas immédiat", pas
+// une 3e valeur indépendante — d'où `momentService` en string plutôt que
+// deux booléens combinables n'importe comment.
+const MOMENTS_SERVICE = [
+  { id: 'immediat', label: 'Dès que prêt' },
+  { id: 'avec_reste', label: 'Avec le reste' },
+  { id: 'a_la_fin', label: 'À la fin' },
+]
+
 function DetailPlatModal({ plat, onFermer, onConfirmer }) {
   const [quantite, setQuantite] = useState(1)
-  const [serviceImmediat, setServiceImmediat] = useState(true)
+  const [momentService, setMomentService] = useState('immediat')
   const [commentaire, setCommentaire] = useState('')
   // `plat.modifiers` est déjà imbriqué avec ses détails complets ici
   // (`QrMenuItemSerializer`, pas une simple liste d'IDs comme côté staff)
@@ -19,7 +30,8 @@ function DetailPlatModal({ plat, onFermer, onConfirmer }) {
       plat_nom: plat.nom,
       prix: plat.prix,
       quantite,
-      service_immediat: serviceImmediat,
+      service_immediat: momentService === 'immediat',
+      servir_en_dernier: momentService === 'a_la_fin',
       commentaire_libre: commentaire,
       modificateurs: selection,
       modificateurs_libelles: groupes
@@ -31,7 +43,16 @@ function DetailPlatModal({ plat, onFermer, onConfirmer }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onFermer}>
-      <div className="w-full rounded-t-2xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+      {/* `max-h-[85vh] overflow-y-auto` (trouvé en usage réel, capture
+          d'écran d'un vrai téléphone) : sans ça, un plat avec plusieurs
+          catégories de modificateurs dépassait la hauteur de l'écran —
+          ni le bouton fermer (en haut) ni le bouton confirmer (en bas)
+          n'étaient plus atteignables, aucun défilement possible. Même
+          traitement que `SelecteurModificateursPopup.jsx` côté staff. */}
+      <div
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="mb-4 flex items-start justify-between">
           <p className="text-lg font-bold text-gray-900">{plat.nom}</p>
           <button
@@ -65,25 +86,20 @@ function DetailPlatModal({ plat, onFermer, onConfirmer }) {
 
         <div className="mb-4">
           <span className="mb-2 block text-sm text-gray-600">Quand le servir ?</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setServiceImmediat(true)}
-              className={`flex-1 rounded-lg py-2 text-sm font-semibold ${
-                serviceImmediat ? 'text-white' : 'bg-gray-200 text-gray-700'
-              }`}
-              style={serviceImmediat ? { backgroundColor: 'var(--color-primary, #1B2431)' } : undefined}
-            >
-              Dès que prêt
-            </button>
-            <button
-              onClick={() => setServiceImmediat(false)}
-              className={`flex-1 rounded-lg py-2 text-sm font-semibold ${
-                !serviceImmediat ? 'text-white' : 'bg-gray-200 text-gray-700'
-              }`}
-              style={!serviceImmediat ? { backgroundColor: 'var(--color-primary, #1B2431)' } : undefined}
-            >
-              Avec le reste
-            </button>
+          <div className="flex flex-wrap gap-2">
+            {MOMENTS_SERVICE.map((m) => {
+              const actif = momentService === m.id
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setMomentService(m.id)}
+                  className={`flex-1 rounded-lg py-2 text-sm font-semibold ${actif ? 'text-white' : 'bg-gray-200 text-gray-700'}`}
+                  style={actif ? { backgroundColor: 'var(--color-primary, #1B2431)' } : undefined}
+                >
+                  {m.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -132,6 +148,7 @@ export default function MenuView({ categories, devise, onAjouter }) {
       prix: plat.prix,
       quantite: 1,
       service_immediat: true,
+      servir_en_dernier: false,
       commentaire_libre: '',
       modificateurs: [],
     })

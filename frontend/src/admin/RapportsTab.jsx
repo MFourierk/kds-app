@@ -501,7 +501,13 @@ export default function RapportsTab() {
             <>
               <div className="mb-5 grid grid-cols-2 gap-4 sm:grid-cols-2">
                 <StatTile label="Commandes annulées" value={annulees.nb_commandes_annulees} icone="🚫" accent="red" />
-                <StatTile label="Montant perdu" value={formatPrix(annulees.montant_total_perdu, 'XOF')} icone="💸" accent="slate" />
+                <StatTile
+                  label="Montant perdu"
+                  value={formatPrix(annulees.montant_total_perdu, 'XOF')}
+                  icone="💸"
+                  accent="slate"
+                  description="Valeur des plats annulés jamais servis (les plats déjà en salle avant l'annulation ne comptent pas)"
+                />
               </div>
 
               {annulees.commandes.length === 0 ? (

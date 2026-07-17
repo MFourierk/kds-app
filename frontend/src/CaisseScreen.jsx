@@ -5,7 +5,11 @@ import { construireRecuHTML, ouvrirApercuImpression } from './print/imprimer'
 import PaiementPicker from './PaiementPicker'
 import VenteComptoirScreen from './VenteComptoirScreen'
 
-const ROLES_ENCAISSEMENT = ['manager', 'admin']
+// `caissier` ajouté après coup (§TPE — elle doit aussi pouvoir encaisser
+// les commandes de table, pas seulement la vente comptoir) : correspond
+// enfin au gate déjà en place côté backend (`PeutEncaisser`), qui
+// incluait déjà ce rôle sans que l'écran ne le lui permette.
+const ROLES_ENCAISSEMENT = ['manager', 'admin', 'caissier']
 
 /**
  * Écran caisse (§5.5, demandé après coup avec le reçu de caisse) :
@@ -17,18 +21,22 @@ const ROLES_ENCAISSEMENT = ['manager', 'admin']
  *   3 écrans dédiés au rôle serveur, consultation uniquement). Pas
  *   d'onglets pour lui : cet écran garde exactement son comportement
  *   d'avant l'ajout de la vente comptoir.
- * - **Manager/admin uniquement** : impression de la facture/du reçu, ET
+ * - **Manager/admin/caissier·ère** : impression de la facture/du reçu, ET
  *   encaissement (mode de paiement, montant reçu en espèces, calcul de la
  *   monnaie). Correspond exactement au gate déjà posé côté backend pour
  *   l'encaissement (`OrderViewSet.get_permissions` — `encaisser` réservé
- *   `PeutEncaisser`) ; l'impression n'a pas d'équivalent backend (aperçu
- *   généré côté écran), le gate est purement frontend ici. Gagne en plus
- *   un onglet "Vente comptoir" (§TPE) — un client au comptoir n'a pas de
- *   commande de table à régler, juste un achat direct à encaisser tout de
- *   suite (`VenteComptoirScreen`, aussi utilisé tel quel comme écran
- *   verrouillé du rôle caissier·ère, cf. `App.jsx`).
+ *   `PeutEncaisser`, qui inclut déjà `caissier`) ; l'impression n'a pas
+ *   d'équivalent backend (aperçu généré côté écran), le gate est
+ *   purement frontend ici. Gagne en plus un onglet "Vente comptoir"
+ *   (§TPE) — un client au comptoir n'a pas de commande de table à
+ *   régler, juste un achat direct à encaisser tout de suite
+ *   (`VenteComptoirScreen`). La caissière (écran verrouillé, `App.jsx`)
+ *   atterrit maintenant ici — pas directement sur `VenteComptoirScreen`
+ *   comme avant — pour pouvoir aussi encaisser les commandes de table,
+ *   demandé après coup ; `ongletParDefaut="comptoir"` la fait quand même
+ *   démarrer sur son usage principal.
  */
-export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexion }) {
+export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexion, ongletParDefaut = 'tables' }) {
   const [commandes, setCommandes] = useState(null)
   const [erreur, setErreur] = useState('')
   const [message, setMessage] = useState(null) // { texte, erreur }
@@ -39,7 +47,11 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
   const [motifAnnulation, setMotifAnnulation] = useState('')
   const [enCours, setEnCours] = useState(false)
   const [tenant, setTenant] = useState(null)
-  const [onglet, setOnglet] = useState('tables') // 'tables' | 'comptoir' — seul le manager/admin voit la bascule
+  // 'tables' | 'comptoir' — seul un rôle `peutEncaisser` voit la bascule.
+  // `ongletParDefaut` : la caissière (verrouillée sur cet écran, §TPE)
+  // ouvre sur "Vente comptoir" (son usage principal), pas "Commandes de
+  // table" comme le manager/admin.
+  const [onglet, setOnglet] = useState(ongletParDefaut)
 
   const peutEncaisser = ROLES_ENCAISSEMENT.includes(utilisateur?.role)
   // Même liste de rôles qu'`ROLES_ENCAISSEMENT` aujourd'hui, mais nommée à

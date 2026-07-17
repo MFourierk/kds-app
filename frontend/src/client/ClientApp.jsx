@@ -203,6 +203,7 @@ export default function ClientApp({ qrToken }) {
         (l) =>
           l.plat === ligne.plat &&
           l.service_immediat === ligne.service_immediat &&
+          l.servir_en_dernier === ligne.servir_en_dernier &&
           l.commentaire_libre === ligne.commentaire_libre &&
           memesModificateurs(l.modificateurs, ligne.modificateurs),
       )
@@ -224,10 +225,11 @@ export default function ClientApp({ qrToken }) {
     // qui doit garder la même clé si elle est rejouée depuis la file
     // hors-ligne, sinon la déduplication côté serveur ne sert à rien.
     const idempotencyKey = crypto.randomUUID()
-    const items = panier.map(({ plat, quantite, service_immediat, commentaire_libre, modificateurs }) => ({
+    const items = panier.map(({ plat, quantite, service_immediat, servir_en_dernier, commentaire_libre, modificateurs }) => ({
       plat,
       quantite,
       service_immediat,
+      servir_en_dernier,
       commentaire_libre,
       modificateurs,
     }))
@@ -366,7 +368,11 @@ export default function ClientApp({ qrToken }) {
               <li key={index} className="flex items-center justify-between">
                 <span>
                   {ligne.quantite}× {ligne.plat_nom}
-                  {!ligne.service_immediat && <span className="ml-1 text-xs text-gray-400">(avec le reste)</span>}
+                  {!ligne.service_immediat && (
+                    <span className="ml-1 text-xs text-gray-400">
+                      ({ligne.servir_en_dernier ? 'à la fin' : 'avec le reste'})
+                    </span>
+                  )}
                   {ligne.modificateurs_libelles?.length > 0 && (
                     <span className="ml-1 text-xs text-gray-400">({ligne.modificateurs_libelles.join(', ')})</span>
                   )}

@@ -153,6 +153,17 @@ class OrderTicket(TenantScopedModel):
     is_held = models.BooleanField(
         default=False, help_text="Fire/Hold — envoi volontairement retenu (cf. §5.1)"
     )
+    # "À la fin" (§5.6, demandé après coup — en plus de "dès que prêt"/
+    # "avec le reste", ex: un dessert qui doit arriver après tout le
+    # reste, même après les plats "avec le reste"). Un raffinement de
+    # `is_held` (toujours vrai quand `en_dernier` l'est), pas un
+    # remplacement : `is_held` continue de piloter tout ce qui existait
+    # déjà (visibilité "Lancer" côté cuisine, cf. `TicketCard.jsx`) ; ce
+    # champ ne sert qu'à distinguer, parmi les tickets retenus, ceux qui
+    # doivent attendre le reste tout court de ceux qui doivent attendre
+    # le reste PLUS les tickets "avec le reste" — cf.
+    # `signals._auto_fire_tickets_retenus_si_reste_pret`.
+    en_dernier = models.BooleanField(default=False)
     is_rush = models.BooleanField(default=False)
 
     heure_envoi_poste = models.DateTimeField(null=True, blank=True)
