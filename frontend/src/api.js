@@ -207,13 +207,17 @@ export async function fetchStats(chemin, periode = {}) {
 }
 
 /**
- * Ventes encaissées pour une journée (`VentesParJourView`, réservé
- * manager/admin). `date` au format YYYY-MM-DD ; défaut backend =
- * aujourd'hui si omis.
+ * Ventes encaissées sur une période (`VentesParJourView`, réservé
+ * manager/admin) — même convention `{ depuis, jusqu_a }` ISO 8601 que
+ * `fetchStats` (élargi de "une journée" à une vraie période, demandé
+ * après coup). Défaut backend = les dernières 24h si omis.
  */
-export async function fetchVentesParJour(date) {
-  const params = date ? `?date=${date}` : ''
-  const response = await apiFetch(`/api/stats/ventes/${params}`)
+export async function fetchVentesParJour(periode = {}) {
+  const params = new URLSearchParams()
+  if (periode.depuis) params.set('depuis', periode.depuis)
+  if (periode.jusqu_a) params.set('jusqu_a', periode.jusqu_a)
+  const suffixe = params.toString() ? `?${params.toString()}` : ''
+  const response = await apiFetch(`/api/stats/ventes/${suffixe}`)
   if (!response.ok) {
     const erreur = new Error('Impossible de charger les ventes.')
     erreur.status = response.status

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { fetchStats, fetchTenant, fetchVentesParJour } from '../api'
 import { formatPrix } from '../client/formatPrix'
 import {
-  LIBELLE_MODE_PAIEMENT,
   construireCarteInfo,
   construireSignaturesRapport,
   construireTitreRapport,
@@ -12,6 +11,7 @@ import {
 import HorizontalBarChart from './charts/HorizontalBarChart'
 import LineChartHeures from './charts/LineChartHeures'
 import StatTile from './StatTile'
+import { Badge } from './ui'
 
 function dateDuJour() {
   const d = new Date()
@@ -28,6 +28,16 @@ const PRESETS = [
 function periodePourPreset(heures) {
   const jusqu_a = new Date()
   const depuis = new Date(jusqu_a.getTime() - heures * 3600 * 1000)
+  return { depuis: depuis.toISOString(), jusqu_a: jusqu_a.toISOString() }
+}
+
+// Deux dates calendaires (inputs `type="date"`, ex: "du 1er au 15 juillet")
+// converties en bornes ISO datetime — même format que `periodePourPreset`
+// ci-dessus, `jusqu_a` couvrant toute la journée de fin (23:59:59) pour ne
+// pas exclure les ventes du dernier jour de la période.
+function periodePourDates(depuisStr, jusquaStr) {
+  const depuis = new Date(`${depuisStr}T00:00:00`)
+  const jusqu_a = new Date(`${jusquaStr}T23:59:59.999`)
   return { depuis: depuis.toISOString(), jusqu_a: jusqu_a.toISOString() }
 }
 
@@ -86,16 +96,23 @@ export default function RapportsTab() {
   const [erreur, setErreur] = useState('')
   const [productiviteInterdite, setProductiviteInterdite] = useState(false)
 
-  const [dateVentes, setDateVentes] = useState(dateDuJour)
+  // Période plutôt qu'une date fixe (demandé après coup — un gérant édite
+  // aussi ce rapport sur une semaine/un mois, pas uniquement jour par
+  // jour) ; les deux bornes démarrent sur aujourd'hui pour garder le même
+  // comportement par défaut qu'avant ce changement.
+  const [depuisVentes, setDepuisVentes] = useState(dateDuJour)
+  const [jusquaVentes, setJusquaVentes] = useState(dateDuJour)
   const [ventes, setVentes] = useState(null)
   const [chargementVentes, setChargementVentes] = useState(true)
   const [erreurVentes, setErreurVentes] = useState('')
   const [tenant, setTenant] = useState(null)
-  // Les 3 tableaux (commandes / par article / par catégorie) restaient tous
-  // dépliés en permanence sous "Ventes du jour" — la moitié de la densité
-  // reprochée à cet écran. Un seul visible à la fois, comme les onglets
-  // déjà utilisés partout ailleurs dans le back-office (Menu, Tables...).
-  const [vueVentes, setVueVentes] = useState('commandes')
+  // Les 3 tableaux (commandes / par article / par catégorie) sont
+  // regroupés en un seul tableau "Mouvements" (une ligne par article
+  // vendu, demandé après coup sur le modèle d'un autre outil de gestion)
+  // filtrable au lieu de rester tous dépliés en permanence.
+  const [rechercheMouvement, setRechercheMouvement] = useState('')
+  const [secteurFiltre, setSecteurFiltre] = useState('tous')
+  const [categorieFiltre, setCategorieFiltre] = useState('toutes')
 
   // Best-effort (même logique que `GestionTables.jsx`/`AdminDashboard.jsx`) :
   // sert uniquement à porter le logo/couleurs de marque sur le rapport
@@ -147,7 +164,7 @@ export default function RapportsTab() {
     setChargementVentes(true)
     setErreurVentes('')
 
-    fetchVentesParJour(dateVentes)
+    fetchVentesParJour(periodePourDates(depuisVentes, jusquaVentes))
       .then((data) => {
         if (annule) return
         setVentes(data)
@@ -162,22 +179,21 @@ export default function RapportsTab() {
     return () => {
       annule = true
     }
-  }, [dateVentes])
+  }, [depuisVentes, jusquaVentes])
 
   function imprimerVentes() {
     if (!ventes) return
 
     // Ni coût ni marge (pas de prix d'achat suivi dans l'app, cf. demande
     // explicite : "juste comme une calculatrice" — le CA encaissé par
-    // article/catégorie, sans notion de rentabilité) : contrairement au
-    // modèle de référence (rapport de marges), les seuls chiffres fiables
-    // ici sont ceux déjà affichés à l'écran (CA, quantités, panier moyen).
-    const dateLisible = new Date(ventes.date).toLocaleDateString('fr-FR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
+    // article/catégorie/secteur, sans notion de rentabilité) : contrairement
+    // au modèle de référence (rapport de marges), les seuls chiffres
+    // fiables ici sont ceux déjà affichés à l'écran.
+    const formatDate = (iso) => new Date(iso).toLocaleDateString('fr-FR')
+    const periodeLisible =
+      depuisVentes === jusquaVentes
+        ? new Date(ventes.depuis).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : `Du ${formatDate(ventes.depuis)} au ${formatDate(ventes.jusqu_a)}`
     const panierMoyen = ventes.nb_commandes > 0 ? ventes.total_ventes / ventes.nb_commandes : 0
     const maintenant = new Date()
 
@@ -185,15 +201,17 @@ export default function RapportsTab() {
       `<tr><td>${echapper(a.plat_nom)}</td><td>${echapper(a.categorie_nom ?? '—')}</td><td>${a.quantite_totale}</td><td>${formatPrix(a.montant_total, 'XOF')}</td></tr>`
     const ligneCategorie = (c) =>
       `<tr><td>${echapper(c.categorie_nom ?? '—')}</td><td>${c.quantite_totale}</td><td>${formatPrix(c.montant_total, 'XOF')}</td></tr>`
+    const ligneSecteur = (s) =>
+      `<tr><td>${echapper(s.secteur_libelle)}</td><td>${s.nb_commandes}</td><td>${formatPrix(s.montant_total, 'XOF')}</td></tr>`
 
     const corpsHtml = `
-      ${construireTitreRapport('État des ventes', dateLisible, `${ventes.par_categorie.length} catégorie${ventes.par_categorie.length > 1 ? 's' : ''}`)}
+      ${construireTitreRapport('État des ventes', periodeLisible, `${ventes.par_categorie.length} catégorie${ventes.par_categorie.length > 1 ? 's' : ''}`)}
 
       <div class="cartes-info">
         ${construireCarteInfo('Informations du rapport', [
           { label: "Date d'édition", valeur: echapper(maintenant.toLocaleDateString('fr-FR')) },
           { label: 'Heure', valeur: echapper(maintenant.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })) },
-          { label: 'Date du rapport', valeur: echapper(new Date(ventes.date).toLocaleDateString('fr-FR')) },
+          { label: 'Période', valeur: echapper(`${formatDate(ventes.depuis)} – ${formatDate(ventes.jusqu_a)}`) },
         ])}
         ${construireCarteInfo('Synthèse globale', [
           { label: 'CA total', valeur: formatPrix(ventes.total_ventes, 'XOF'), accent: true },
@@ -202,10 +220,20 @@ export default function RapportsTab() {
         ])}
       </div>
 
+      <h2 class="section-rapport">Détail par secteur</h2>
+      ${
+        ventes.par_secteur.length === 0
+          ? '<p class="sous-titre-rapport">Aucune vente sur cette période.</p>'
+          : `<table class="table-rapport">
+              <thead><tr><th>Secteur</th><th>Commandes</th><th>CA</th></tr></thead>
+              <tbody>${ventes.par_secteur.map(ligneSecteur).join('')}</tbody>
+            </table>`
+      }
+
       <h2 class="section-rapport">Détail par catégorie</h2>
       ${
         ventes.par_categorie.length === 0
-          ? '<p class="sous-titre-rapport">Aucune vente cette date.</p>'
+          ? '<p class="sous-titre-rapport">Aucune vente sur cette période.</p>'
           : `<table class="table-rapport">
               <thead><tr><th>Catégorie</th><th>Qté</th><th>CA</th></tr></thead>
               <tbody>
@@ -218,7 +246,7 @@ export default function RapportsTab() {
       <h2 class="section-rapport">Détail par article</h2>
       ${
         ventes.par_article.length === 0
-          ? '<p class="sous-titre-rapport">Aucune vente cette date.</p>'
+          ? '<p class="sous-titre-rapport">Aucune vente sur cette période.</p>'
           : `<table class="table-rapport">
               <thead><tr><th>Article</th><th>Catégorie</th><th>Qté</th><th>CA</th></tr></thead>
               <tbody>${ventes.par_article.map(ligneArticle).join('')}</tbody>
@@ -233,9 +261,9 @@ export default function RapportsTab() {
 
       ${construireSignaturesRapport('Manager / Responsable', 'Caissier·ère')}
     `
-    ouvrirRapportImpression(`État des ventes — ${ventes.date}`, corpsHtml, {
+    ouvrirRapportImpression(`État des ventes — ${formatDate(ventes.depuis)} au ${formatDate(ventes.jusqu_a)}`, corpsHtml, {
       tenant,
-      piedDroite: `État des ventes — ${new Date(ventes.date).toLocaleDateString('fr-FR')}`,
+      piedDroite: `État des ventes — ${formatDate(ventes.depuis)} au ${formatDate(ventes.jusqu_a)}`,
     })
   }
 
@@ -246,26 +274,49 @@ export default function RapportsTab() {
       ? donnees.tempsPoste.reduce((s, t) => s + t.duree_moyenne_secondes, 0) / donnees.tempsPoste.length
       : null
 
-  const VUES_VENTES = [
-    { id: 'commandes', label: 'Commandes' },
-    { id: 'article', label: 'Par article' },
-    { id: 'categorie', label: 'Par catégorie' },
-  ]
+  // "Mouvements" (une ligne par article vendu) filtrable côté client — le
+  // jeu de données d'une période reste petit (un restaurant, pas des
+  // milliers de lignes), pas besoin d'un filtrage serveur dédié.
+  const categoriesMouvements = ventes
+    ? [...new Set(ventes.mouvements.map((m) => m.categorie_nom).filter(Boolean))].sort()
+    : []
+  const mouvementsFiltres = ventes
+    ? ventes.mouvements.filter((m) => {
+        if (secteurFiltre !== 'tous' && m.secteur !== secteurFiltre) return false
+        if (categorieFiltre !== 'toutes' && m.categorie_nom !== categorieFiltre) return false
+        if (rechercheMouvement && !m.plat_nom.toLowerCase().includes(rechercheMouvement.toLowerCase())) return false
+        return true
+      })
+    : []
 
   return (
     <div className="space-y-10">
       {erreur && <div className="rounded-xl bg-red-100 p-4 text-sm font-semibold text-red-800">{erreur}</div>}
 
       <section>
-        <SectionEyebrow icone="💰" titre="Chiffre d'affaires" sousTitre="Ventes encaissées, par date de paiement" />
+        <SectionEyebrow icone="💰" titre="Chiffre d'affaires" sousTitre="Ventes encaissées, par période de paiement" />
         <ReportCard>
           <div className="mb-4 flex flex-wrap items-center gap-3">
-            <input
-              type="date"
-              value={dateVentes}
-              onChange={(e) => setDateVentes(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none"
-            />
+            <label className="flex items-center gap-2 text-sm text-gray-500">
+              Du
+              <input
+                type="date"
+                value={depuisVentes}
+                max={jusquaVentes}
+                onChange={(e) => setDepuisVentes(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-500">
+              au
+              <input
+                type="date"
+                value={jusquaVentes}
+                min={depuisVentes}
+                onChange={(e) => setJusquaVentes(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none"
+              />
+            </label>
             {chargementVentes && <span className="text-sm text-gray-400">Chargement...</span>}
             {ventes && (
               <button
@@ -286,109 +337,104 @@ export default function RapportsTab() {
                 <StatTile label="Commandes payées" value={ventes.nb_commandes} icone="🧾" accent="slate" />
               </div>
 
-              <div className="mb-4 inline-flex gap-1 rounded-full bg-gray-100 p-1 text-sm">
-                {VUES_VENTES.map((v) => (
-                  <button
-                    key={v.id}
-                    onClick={() => setVueVentes(v.id)}
-                    className={`rounded-full px-3.5 py-1.5 font-semibold transition ${
-                      vueVentes === v.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
-                    }`}
+              {ventes.par_secteur.length > 0 && (
+                <div className="mb-5">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">CA par secteur</h3>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {ventes.par_secteur.map((s) => (
+                      <div key={s.secteur} className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3 ring-1 ring-gray-100">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{s.secteur_libelle}</p>
+                          <p className="text-xs text-gray-500">{s.nb_commandes} commande{s.nb_commandes > 1 ? 's' : ''}</p>
+                        </div>
+                        <p className="text-lg font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {formatPrix(s.montant_total, 'XOF')}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Mouvements</h3>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={rechercheMouvement}
+                  onChange={(e) => setRechercheMouvement(e.target.value)}
+                  placeholder="Rechercher un article..."
+                  className="min-w-[180px] flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none"
+                />
+                <select
+                  value={secteurFiltre}
+                  onChange={(e) => setSecteurFiltre(e.target.value)}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none"
+                >
+                  <option value="tous">Tous les secteurs</option>
+                  {ventes.par_secteur.map((s) => (
+                    <option key={s.secteur} value={s.secteur}>
+                      {s.secteur_libelle}
+                    </option>
+                  ))}
+                </select>
+                {categoriesMouvements.length > 0 && (
+                  <select
+                    value={categorieFiltre}
+                    onChange={(e) => setCategorieFiltre(e.target.value)}
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none"
                   >
-                    {v.label}
-                  </button>
-                ))}
+                    <option value="toutes">Toutes catégories</option>
+                    {categoriesMouvements.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
-              {vueVentes === 'commandes' &&
-                (ventes.commandes.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-gray-400">Aucune vente encaissée à cette date.</p>
-                ) : (
+              {mouvementsFiltres.length === 0 ? (
+                <p className="py-4 text-center text-sm text-gray-400">
+                  {ventes.mouvements.length === 0 ? 'Aucune vente sur cette période.' : 'Aucun mouvement ne correspond aux filtres.'}
+                </p>
+              ) : (
+                <div className="max-h-[480px] overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b text-left text-gray-500">
-                        <th className="pb-2 font-medium">Heure</th>
-                        <th className="pb-2 font-medium">Table</th>
-                        <th className="pb-2 font-medium">Serveur</th>
-                        <th className="pb-2 font-medium">Paiement</th>
-                        <th className="pb-2 text-right font-medium">Total</th>
+                      <tr className="sticky top-0 border-b bg-white text-left text-gray-500">
+                        <th className="pb-2 pr-3 font-medium">Secteur</th>
+                        <th className="pb-2 pr-3 font-medium">Article</th>
+                        <th className="pb-2 pr-3 font-medium">Catégorie</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Qté</th>
+                        <th className="pb-2 pr-4 text-right font-medium">Montant</th>
+                        <th className="pb-2 pr-3 font-medium">Date &amp; heure</th>
+                        <th className="pb-2 font-medium">Utilisateur</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {ventes.commandes.map((c) => (
-                        <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
-                          <td className="py-2 text-gray-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {new Date(c.heure_paiement).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      {mouvementsFiltres.map((m) => (
+                        <tr key={m.id} className="border-b last:border-0 hover:bg-gray-50">
+                          <td className="py-2 pr-3">
+                            <Badge tone={m.secteur === 'salle' ? 'emerald' : 'amber'}>{m.secteur_libelle}</Badge>
                           </td>
-                          <td className="py-2 text-gray-900">{c.table_numero ?? '—'}</td>
-                          <td className="py-2 text-gray-600">{c.serveur_nom ?? '—'}</td>
-                          <td className="py-2 text-gray-600">{LIBELLE_MODE_PAIEMENT[c.mode_paiement] ?? c.mode_paiement}</td>
-                          <td className="py-2 text-right font-semibold text-gray-700" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {formatPrix(c.total, 'XOF')}
+                          <td className="py-2 pr-3 text-gray-900">{m.plat_nom}</td>
+                          <td className="py-2 pr-3 text-gray-600">{m.categorie_nom ?? '—'}</td>
+                          <td className="py-2 pr-3 text-right text-gray-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {m.quantite}
                           </td>
+                          <td className="py-2 pr-4 text-right font-semibold text-gray-700" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {formatPrix(m.montant, 'XOF')}
+                          </td>
+                          <td className="py-2 pr-3 text-gray-500" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {new Date(m.heure_paiement).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="py-2 text-gray-500">{m.utilisateur_nom ?? '—'}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                ))}
-
-              {vueVentes === 'article' &&
-                (ventes.par_article.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-gray-400">Aucune vente cette date.</p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-gray-500">
-                        <th className="pb-2 font-medium">Article</th>
-                        <th className="pb-2 font-medium">Catégorie</th>
-                        <th className="pb-2 text-right font-medium">Qté</th>
-                        <th className="pb-2 text-right font-medium">Montant</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ventes.par_article.map((a) => (
-                        <tr key={a.plat} className="border-b last:border-0 hover:bg-gray-50">
-                          <td className="py-2 text-gray-900">{a.plat_nom}</td>
-                          <td className="py-2 text-gray-600">{a.categorie_nom ?? '—'}</td>
-                          <td className="py-2 text-right text-gray-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {a.quantite_totale}
-                          </td>
-                          <td className="py-2 text-right font-semibold text-gray-700" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {formatPrix(a.montant_total, 'XOF')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ))}
-
-              {vueVentes === 'categorie' &&
-                (ventes.par_categorie.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-gray-400">Aucune vente cette date.</p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-gray-500">
-                        <th className="pb-2 font-medium">Catégorie</th>
-                        <th className="pb-2 text-right font-medium">Qté</th>
-                        <th className="pb-2 text-right font-medium">Montant</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ventes.par_categorie.map((c) => (
-                        <tr key={c.categorie ?? 'sans-categorie'} className="border-b last:border-0 hover:bg-gray-50">
-                          <td className="py-2 text-gray-900">{c.categorie_nom ?? '—'}</td>
-                          <td className="py-2 text-right text-gray-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {c.quantite_totale}
-                          </td>
-                          <td className="py-2 text-right font-semibold text-gray-700" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {formatPrix(c.montant_total, 'XOF')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ))}
+                </div>
+              )}
             </>
           )}
         </ReportCard>

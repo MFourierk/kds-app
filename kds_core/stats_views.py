@@ -7,12 +7,12 @@ Ces vues sont volontairement des `APIView` simples (pas des ViewSets) :
 ce sont des rapports agrégés en lecture seule, pas des ressources CRUD.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Sum
 from django.db.models.functions import ExtractHour
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_datetime
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -204,73 +204,89 @@ class GaspillageView(BaseStatsView):
         return Response(list(rows))
 
 
+LIBELLE_SECTEUR = {"salle": "Commandes de table", "comptoir": "Vente comptoir"}
+
+
 class VentesParJourView(BaseStatsView):
     """
-    `GET /api/stats/ventes/?date=YYYY-MM-DD` — chiffre d'affaires
-    encaissé pour une journée donnée (§5.5, demandé après coup en même
-    temps que l'écran caisse). Réservé manager/admin (`IsManagerOrAdmin`,
+    `GET /api/stats/ventes/?depuis=&jusqu_a=` (ISO 8601, même convention
+    que le reste de ce fichier via `_resoudre_periode` — défaut : les
+    dernières 24h) — chiffre d'affaires encaissé sur une période (§5.5,
+    demandé après coup en même temps que l'écran caisse ; élargi d'"une
+    journée" (`?date=`) à une vraie période après retour utilisateur — un
+    gérant édite aussi ce rapport sur une semaine ou un mois, pas
+    uniquement jour par jour). Réservé manager/admin (`IsManagerOrAdmin`,
     même logique que `productivite-employes` : le chiffre d'affaires est
     une donnée sensible, un serveur qui encaisse n'a pas besoin de voir
-    le total du restaurant sur la journée).
+    le total du restaurant).
 
     Basé sur `heure_paiement`, pas `created_at` : une commande passée
     tard le soir et payée après minuit compte sur le jour où l'argent est
     réellement rentré, pas sur le jour où le client a commandé — c'est ce
     qui correspond à "les ventes du 13 juillet" pour un gérant qui fait
     sa caisse.
+
+    `secteur` ("Commandes de table" / "Vente comptoir", demandé après
+    coup) dérivé de `Order.table` (présente ou non), pas de `Order.source`
+    directement — c'est le même critère que celui déjà utilisé à la
+    création de la commande (`OrderViewSet.prendre_commande` : `source =
+    SALLE if table else COMPTOIR`), et il reste correct même pour
+    d'éventuelles sources futures (QR_CODE, click&collect...) sans qu'il
+    faille mettre ce rapport à jour à chaque nouveau canal.
     """
 
     permission_classes = [IsAuthenticated, IsTenantMember, IsManagerOrAdmin, LicenceRapportsAutorises]
 
     def get(self, request):
-        jour = parse_date(request.query_params.get("date", "")) or timezone.localdate()
-        debut = timezone.make_aware(datetime.combine(jour, datetime.min.time()))
-        fin = debut + timedelta(days=1)
+        depuis, jusqu_a = _resoudre_periode(request)
 
         commandes = (
             models.Order.objects.filter(
                 tenant=request.user.tenant,
                 statut_paiement=models.Order.StatutPaiement.PAYEE,
-                heure_paiement__gte=debut,
-                heure_paiement__lt=fin,
+                heure_paiement__gte=depuis,
+                heure_paiement__lte=jusqu_a,
             )
-            .select_related("table", "serveur")
+            .select_related("table", "serveur", "caissier")
             .order_by("heure_paiement")
         )
 
-        detail = []
         total_ventes = 0
+        nb_commandes = 0
+        par_secteur_brut = {}
         for commande in commandes:
             total_commande = services.calculer_total_commande(commande)
             total_ventes += total_commande
-            detail.append(
-                {
-                    "id": commande.id,
-                    "table_numero": commande.table.numero if commande.table else None,
-                    "serveur_nom": (
-                        (commande.serveur.get_full_name() or commande.serveur.username)
-                        if commande.serveur
-                        else None
-                    ),
-                    "total": total_commande,
-                    "mode_paiement": commande.mode_paiement,
-                    "heure_paiement": commande.heure_paiement,
-                }
-            )
+            nb_commandes += 1
+            secteur = "salle" if commande.table else "comptoir"
+            bucket = par_secteur_brut.setdefault(secteur, {"montant_total": 0, "nb_commandes": 0})
+            bucket["montant_total"] += total_commande
+            bucket["nb_commandes"] += 1
 
-        # Ventes par article/catégorie (§5.5, demandé après coup — "l'état
-        # des ventes par article/catégorie à une date donnée", imprimable
-        # depuis le tableau de bord). Basé sur les MÊMES commandes déjà
-        # filtrées ci-dessus (même date, mêmes commandes payées) — pas un
-        # nouvel endpoint séparé, une deuxième vue du même jeu de données.
-        # `plat__prix` (pas un prix figé par ligne, cf. `OrderItem` — le
-        # projet n'a jamais stocké de prix historique par ligne, seule
-        # source de vérité : le prix courant du plat, même logique que
-        # `services.calculer_total_commande`).
-        lignes = models.OrderItem.objects.filter(
-            tenant=request.user.tenant,
-            ticket__order__in=commandes,
-        ).exclude(statut_ligne=models.OrderItem.StatutLigne.ANNULE)
+        par_secteur = [
+            {"secteur": secteur, "secteur_libelle": LIBELLE_SECTEUR[secteur], **valeurs}
+            for secteur, valeurs in par_secteur_brut.items()
+        ]
+
+        # Ventes par article/catégorie/secteur (§5.5, demandé après coup —
+        # "l'état des ventes par article/catégorie", puis élargi au détail
+        # ligne par ligne — "Mouvements" côté frontend, regroupant ce qui
+        # était avant 3 vues séparées "Commandes"/"Par article"/"Par
+        # catégorie"). Basé sur les MÊMES commandes déjà filtrées
+        # ci-dessus (même période, mêmes commandes payées) — pas un
+        # nouvel endpoint séparé, une deuxième vue du même jeu de
+        # données. `plat__prix` (pas un prix figé par ligne, cf.
+        # `OrderItem` — le projet n'a jamais stocké de prix historique par
+        # ligne, seule source de vérité : le prix courant du plat, même
+        # logique que `services.calculer_total_commande`).
+        lignes = (
+            models.OrderItem.objects.filter(
+                tenant=request.user.tenant,
+                ticket__order__in=commandes,
+            )
+            .exclude(statut_ligne=models.OrderItem.StatutLigne.ANNULE)
+            .select_related("plat__categorie", "ticket__order__table", "ticket__order__serveur", "ticket__order__caissier")
+        )
 
         par_article = list(
             lignes.values("plat_id", "plat__nom", "plat__categorie__nom")
@@ -283,12 +299,33 @@ class VentesParJourView(BaseStatsView):
             .order_by("-montant_total")
         )
 
+        def _nom_utilisateur(utilisateur):
+            return (utilisateur.get_full_name() or utilisateur.username) if utilisateur else None
+
+        mouvements = [
+            {
+                "id": ligne.id,
+                "secteur": "salle" if ligne.ticket.order.table else "comptoir",
+                "secteur_libelle": LIBELLE_SECTEUR["salle" if ligne.ticket.order.table else "comptoir"],
+                "plat_nom": ligne.plat.nom,
+                "categorie_nom": ligne.plat.categorie.nom if ligne.plat.categorie else None,
+                "quantite": ligne.quantite,
+                "montant": ligne.plat.prix * ligne.quantite,
+                "table_numero": ligne.ticket.order.table.numero if ligne.ticket.order.table else None,
+                "utilisateur_nom": _nom_utilisateur(ligne.ticket.order.caissier) or _nom_utilisateur(ligne.ticket.order.serveur),
+                "heure_paiement": ligne.ticket.order.heure_paiement,
+            }
+            for ligne in sorted(lignes, key=lambda l: l.ticket.order.heure_paiement, reverse=True)
+        ]
+
         return Response(
             {
-                "date": jour.isoformat(),
+                "depuis": depuis.isoformat(),
+                "jusqu_a": jusqu_a.isoformat(),
                 "total_ventes": total_ventes,
-                "nb_commandes": len(detail),
-                "commandes": detail,
+                "nb_commandes": nb_commandes,
+                "par_secteur": par_secteur,
+                "mouvements": mouvements,
                 "par_article": [
                     {
                         "plat": row["plat_id"],
