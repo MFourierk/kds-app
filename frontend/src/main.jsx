@@ -23,19 +23,27 @@ const matchClient = window.location.pathname.match(/^\/t\/([^/]+)\/?$/)
 // (`skipWaiting`/`clientsClaim`), mais le bundle JS déjà en mémoire doit
 // être rechargé pour s'exécuter réellement — `onNeedRefresh` s'en charge.
 //
-// Uniquement le kiosque staff (`!matchClient`) : un client en train de
-// remplir son panier sur son propre téléphone ne doit pas se faire
-// recharger la page sous lui parce qu'une mise à jour du menu est
-// publiée au même moment — son SW continue de s'enregistrer normalement
-// (le mode hors-ligne du menu QR en dépend), juste sans le polling ni le
-// rechargement forcé.
+// Le kiosque staff (`!matchClient`) recharge sans demander (personne
+// n'a de saisie en cours sur un écran inoccupé). Le client QR poll aussi
+// (sinon un téléphone qui a déjà visité une fois reste bloqué sur un
+// vieux bundle pour toujours — vécu en prod : le correctif "Envoi..."
+// qui reste bloqué n'atteignait jamais un téléphone déjà venu avant sa
+// publication), mais ne recharge JAMAIS de force sous un panier en
+// cours de composition — `ClientApp` applique la mise à jour dès que
+// son panier repasse à vide (juste après une commande envoyée, ou avant
+// même d'avoir commencé), et propose un bouton pour le faire plus tôt.
 const updateSW = registerSW({
   onRegisteredSW(swUrl, registration) {
-    if (!registration || matchClient) return
-    setInterval(() => registration.update(), 5000)
+    if (!registration) return
+    setInterval(() => registration.update(), matchClient ? 30000 : 5000)
   },
   onNeedRefresh() {
-    if (!matchClient) updateSW(true)
+    if (matchClient) {
+      window.__kdsAppliquerMiseAJour = () => updateSW(true)
+      window.dispatchEvent(new CustomEvent('kds-maj-disponible'))
+    } else {
+      updateSW(true)
+    }
   },
 })
 

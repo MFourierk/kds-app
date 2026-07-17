@@ -70,6 +70,9 @@ export default function ClientApp({ qrToken }) {
   // le rappelle. Le blocage total ne reste que pour la toute première
   // visite hors ligne, sans aucun menu déjà mis en cache.
   const [modeHorsLigne, setModeHorsLigne] = useState(false)
+  // Voir `main.jsx` : une mise à jour est prête côté service worker mais
+  // n'a pas été appliquée pour ne pas recharger un panier en cours.
+  const [majDisponible, setMajDisponible] = useState(false)
   const [erreurCommande, setErreurCommande] = useState('')
   const [messageAppel, setMessageAppel] = useState('')
   const [envoiEnCours, setEnvoiEnCours] = useState(false)
@@ -77,6 +80,19 @@ export default function ClientApp({ qrToken }) {
   const [notification, setNotification] = useState('')
   const [commandesEnFile, setCommandesEnFile] = useState([])
   const suiviPrecedentRef = useRef(null)
+
+  useEffect(() => {
+    const gestion = () => setMajDisponible(true)
+    window.addEventListener('kds-maj-disponible', gestion)
+    return () => window.removeEventListener('kds-maj-disponible', gestion)
+  }, [])
+
+  // Applique dès que le panier est vide (rien à perdre) — après une
+  // commande envoyée, ou si la mise à jour arrive avant que le client
+  // n'ait commencé à composer. Sinon on attend le bouton du bandeau.
+  useEffect(() => {
+    if (majDisponible && panier.length === 0) window.__kdsAppliquerMiseAJour?.()
+  }, [majDisponible, panier.length])
 
   useEffect(() => {
     let annule = false
@@ -324,6 +340,14 @@ export default function ClientApp({ qrToken }) {
       {modeHorsLigne && (
         <div className="bg-amber-100 p-2 text-center text-xs font-semibold text-amber-800">
           📶 Hors ligne — menu en cache{commandesEnFile.length > 0 ? `, ${commandesEnFile.length} commande(s) en attente d'envoi` : ''}
+        </div>
+      )}
+      {majDisponible && panier.length > 0 && (
+        <div className="bg-indigo-100 p-2 text-center text-xs font-semibold text-indigo-800">
+          🔄 Mise à jour disponible — appliquée après votre commande, ou{' '}
+          <button onClick={() => window.__kdsAppliquerMiseAJour?.()} className="underline">
+            actualiser maintenant
+          </button>
         </div>
       )}
       {notification && (
