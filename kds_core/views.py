@@ -401,22 +401,31 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     def marquer_servi(self, request, pk=None):
         """
         "Tout servir d'un coup" (écran serveur dédié, §5.1) — bascule en
-        une seule action tous les tickets actuellement prêts de cette
-        commande, quel que soit leur poste (cuisine, bar...). Une commande
-        peut avoir plusieurs tickets (un par poste) ; les tickets pas
-        encore prêts sont simplement ignorés plutôt que de faire échouer
-        l'action entière — un serveur doit pouvoir valider ce qui est prêt
-        maintenant et revenir plus tard pour le reste (ex: le bar est prêt,
-        pas encore la cuisine).
+        une seule action tous les PLATS actuellement prêts de cette
+        commande (ligne par ligne, pas ticket par ticket — même critère
+        que `OrderItemViewSet.marquer_servi` et `ServeurScreen.jsx`,
+        cf. le bug trouvé en usage réel où un plat "dès que prêt"
+        n'apparaissait/ne se servait qu'une fois TOUT son ticket prêt).
+        Un ticket retenu (`is_held`, "avec le reste") reste exclu : ses
+        plats, même préparés en avance, n'attendent que d'être lancés,
+        pas confirmés servis directement. Le ticket lui-même passe
+        "servi" tout seul une fois toutes ses lignes actives servies
+        (`signals.py::_sync_ticket_statut_depuis_lignes`), pas besoin de
+        le faire ici.
         """
 
         order = self.get_object()
-        tickets_prets = order.tickets.filter(statut=models.OrderTicket.Statut.PRET)
-        nb = tickets_prets.count()
-        for ticket in tickets_prets:
-            ticket.statut = models.OrderTicket.Statut.SERVI
-            ticket.save()
-        return Response({"detail": f"{nb} ticket(s) marqué(s) servi(s).", "nb_servis": nb})
+        lignes_pretes = models.OrderItem.objects.filter(
+            ticket__order=order,
+            ticket__is_held=False,
+            statut_ligne=models.OrderItem.StatutLigne.PRET,
+        )
+        nb = lignes_pretes.count()
+        for ligne in lignes_pretes:
+            ligne.statut_ligne = models.OrderItem.StatutLigne.SERVI
+            ligne.servi_par = request.user
+            ligne.save()
+        return Response({"detail": f"{nb} plat(s) marqué(s) servi(s).", "nb_servis": nb})
 
     @action(detail=False, methods=["post"], url_path="prendre-commande")
     def prendre_commande(self, request):

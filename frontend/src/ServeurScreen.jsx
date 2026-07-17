@@ -26,10 +26,22 @@ export default function ServeurScreen({ onChangerEcran, onDeconnexion }) {
   const [enCours, setEnCours] = useState(null) // id (ligne ou commande) en cours d'action
   const [erreur, setErreur] = useState('')
 
+  // Trouvé en usage réel : un plat marqué "dès que prêt" par le client
+  // n'apparaissait ici qu'une fois TOUT le ticket prêt (`ticket.statut ===
+  // 'pret'`, qui n'arrive qu'une fois ses lignes actives TOUTES prêtes,
+  // cf. `signals.py::_sync_ticket_statut_depuis_lignes`) — alors que
+  // `OrderItemViewSet.marquer_servi` (backend) autorise déjà de confirmer
+  // un plat servi dès QU'IL est prêt, sans attendre ses voisins de
+  // ticket. Filtre maintenant ligne par ligne, pas ticket par ticket — un
+  // ticket retenu (`is_held`, "avec le reste") reste exclu tant qu'il
+  // n'est pas lancé : c'est la seule situation où attendre est le
+  // comportement voulu (choisi explicitement par le client).
   const commandes = useMemo(() => {
     const parCommande = new Map()
     for (const ticket of tickets) {
-      if (ticket.statut !== 'pret') continue
+      if (ticket.is_held) continue
+      const lignesPretes = ticket.lignes.filter((l) => l.statut_ligne === 'pret')
+      if (lignesPretes.length === 0) continue
       if (!parCommande.has(ticket.order)) {
         parCommande.set(ticket.order, { orderId: ticket.order, table: ticket.table_numero, tickets: [] })
       }
