@@ -491,14 +491,26 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
         """
-        Annule la commande côté staff (ex: la cuisine manque d'un
-        ingrédient, sans intervention de la caisse). Cascade sur les
+        Annule la commande côté staff — ex: le client renonce à une
+        commande en cours, la cuisine manque d'un ingrédient. Motif
+        obligatoire (§5.1, demandé après coup — "avec l'option d'ajouter
+        le motif, obligatoire pour valider l'annulation") : contrairement
+        à `services.cancel_order` lui-même, qui tolère un motif vide pour
+        `PosOrderCancelView` (pas d'écran, pas d'utilisateur humain à qui
+        demander une raison), une annulation déclenchée depuis l'app doit
+        toujours en porter une — traçabilité pour le rapport "Commandes
+        annulées" (`stats_views.CommandesAnnuleesView`). Cascade sur les
         tickets encore actifs — cf. `services.cancel_order`, partagé avec
         `PosOrderCancelView`.
         """
 
+        motif = (request.data.get("motif") or "").strip()
+        if not motif:
+            return Response(
+                {"detail": "Un motif est obligatoire pour annuler une commande."}, status=status.HTTP_400_BAD_REQUEST
+            )
         order = self.get_object()
-        services.cancel_order(order, motif=request.data.get("motif", ""))
+        services.cancel_order(order, motif=motif, utilisateur=request.user)
         return Response(self.get_serializer(order).data)
 
 

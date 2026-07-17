@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchStats, fetchTenant, fetchVentesParJour } from '../api'
+import { fetchCommandesAnnulees, fetchStats, fetchTenant, fetchVentesParJour } from '../api'
 import { formatPrix } from '../client/formatPrix'
 import {
   construireCarteInfo,
@@ -113,6 +113,14 @@ export default function RapportsTab() {
   const [rechercheMouvement, setRechercheMouvement] = useState('')
   const [secteurFiltre, setSecteurFiltre] = useState('tous')
   const [categorieFiltre, setCategorieFiltre] = useState('toutes')
+  const [utilisateurFiltre, setUtilisateurFiltre] = useState('tous')
+
+  // "Commandes annulées" (§5.1, demandé après coup — la procédure
+  // d'annulation elle-même n'existait sur aucun écran) : même période que
+  // "Chiffre d'affaires" ci-dessus, un gérant regarde les deux ensemble.
+  const [annulees, setAnnulees] = useState(null)
+  const [chargementAnnulees, setChargementAnnulees] = useState(true)
+  const [erreurAnnulees, setErreurAnnulees] = useState('')
 
   // Best-effort (même logique que `GestionTables.jsx`/`AdminDashboard.jsx`) :
   // sert uniquement à porter le logo/couleurs de marque sur le rapport
@@ -174,6 +182,28 @@ export default function RapportsTab() {
         if (annule) return
         setErreurVentes(e.status === 403 ? 'Accès réservé aux managers/admins.' : 'Impossible de charger les ventes.')
         setChargementVentes(false)
+      })
+
+    return () => {
+      annule = true
+    }
+  }, [depuisVentes, jusquaVentes])
+
+  useEffect(() => {
+    let annule = false
+    setChargementAnnulees(true)
+    setErreurAnnulees('')
+
+    fetchCommandesAnnulees(periodePourDates(depuisVentes, jusquaVentes))
+      .then((data) => {
+        if (annule) return
+        setAnnulees(data)
+        setChargementAnnulees(false)
+      })
+      .catch((e) => {
+        if (annule) return
+        setErreurAnnulees(e.status === 403 ? 'Accès réservé aux managers/admins.' : 'Impossible de charger les commandes annulées.')
+        setChargementAnnulees(false)
       })
 
     return () => {
@@ -280,10 +310,16 @@ export default function RapportsTab() {
   const categoriesMouvements = ventes
     ? [...new Set(ventes.mouvements.map((m) => m.categorie_nom).filter(Boolean))].sort()
     : []
+  const utilisateursMouvements = ventes
+    ? [...new Map(ventes.mouvements.filter((m) => m.utilisateur).map((m) => [m.utilisateur, m.utilisateur_nom])).entries()].sort(
+        (a, b) => a[1].localeCompare(b[1])
+      )
+    : []
   const mouvementsFiltres = ventes
     ? ventes.mouvements.filter((m) => {
         if (secteurFiltre !== 'tous' && m.secteur !== secteurFiltre) return false
         if (categorieFiltre !== 'toutes' && m.categorie_nom !== categorieFiltre) return false
+        if (utilisateurFiltre !== 'tous' && String(m.utilisateur) !== utilisateurFiltre) return false
         if (rechercheMouvement && !m.plat_nom.toLowerCase().includes(rechercheMouvement.toLowerCase())) return false
         return true
       })
@@ -391,6 +427,20 @@ export default function RapportsTab() {
                     ))}
                   </select>
                 )}
+                {utilisateursMouvements.length > 0 && (
+                  <select
+                    value={utilisateurFiltre}
+                    onChange={(e) => setUtilisateurFiltre(e.target.value)}
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="tous">Tous les utilisateurs</option>
+                    {utilisateursMouvements.map(([id, nom]) => (
+                      <option key={id} value={id}>
+                        {nom}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {mouvementsFiltres.length === 0 ? (
@@ -429,6 +479,61 @@ export default function RapportsTab() {
                             {new Date(m.heure_paiement).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </td>
                           <td className="py-2 text-gray-500">{m.utilisateur_nom ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </ReportCard>
+      </section>
+
+      <section>
+        <SectionEyebrow icone="🚫" titre="Commandes annulées" sousTitre="Même période que le chiffre d'affaires ci-dessus" />
+        <ReportCard>
+          {chargementAnnulees ? (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          ) : erreurAnnulees ? (
+            <p className="py-4 text-center text-sm text-gray-400">{erreurAnnulees}</p>
+          ) : !annulees ? null : (
+            <>
+              <div className="mb-5 grid grid-cols-2 gap-4 sm:grid-cols-2">
+                <StatTile label="Commandes annulées" value={annulees.nb_commandes_annulees} icone="🚫" accent="red" />
+                <StatTile label="Montant perdu" value={formatPrix(annulees.montant_total_perdu, 'XOF')} icone="💸" accent="slate" />
+              </div>
+
+              {annulees.commandes.length === 0 ? (
+                <p className="py-4 text-center text-sm text-gray-400">Aucune commande annulée sur cette période.</p>
+              ) : (
+                <div className="max-h-[420px] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="sticky top-0 border-b bg-white text-left text-gray-500">
+                        <th className="pb-2 pr-3 font-medium">Secteur</th>
+                        <th className="pb-2 pr-3 font-medium">Table</th>
+                        <th className="pb-2 pr-3 font-medium">Motif</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Perte</th>
+                        <th className="pb-2 pr-3 font-medium">Annulée par</th>
+                        <th className="pb-2 font-medium">Date &amp; heure</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {annulees.commandes.map((c) => (
+                        <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
+                          <td className="py-2 pr-3">
+                            <Badge tone={c.secteur === 'salle' ? 'emerald' : 'amber'}>{c.secteur_libelle}</Badge>
+                          </td>
+                          <td className="py-2 pr-3 text-gray-900">{c.table_numero ?? '—'}</td>
+                          <td className="py-2 pr-3 text-gray-600">{c.motif || '—'}</td>
+                          <td className="py-2 pr-3 text-right font-semibold text-red-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {formatPrix(c.montant_perdu, 'XOF')}
+                          </td>
+                          <td className="py-2 pr-3 text-gray-500">{c.annule_par_nom ?? '—'}</td>
+                          <td className="py-2 text-gray-500" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {new Date(c.heure_annulation).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

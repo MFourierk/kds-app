@@ -30,6 +30,7 @@ from kds_core.licence_views import (
 from kds_core.pos_views import PosOrderCancelView, PosOrderCreateView, PosOrderPaymentView
 from kds_core.qr_views import QrCallWaiterView, QrMenuView, QrOrderCreateView, QrOrderStatusView
 from kds_core.stats_views import (
+    CommandesAnnuleesView,
     GaspillageView,
     HeuresDePointeView,
     PlatsPlusLentsView,
@@ -57,6 +58,7 @@ urlpatterns = [
     path('api/stats/productivite-employes/', ProductiviteEmployesView.as_view(), name='stats_productivite'),
     path('api/stats/gaspillage/', GaspillageView.as_view(), name='stats_gaspillage'),
     path('api/stats/ventes/', VentesParJourView.as_view(), name='stats_ventes'),
+    path('api/stats/commandes-annulees/', CommandesAnnuleesView.as_view(), name='stats_commandes_annulees'),
     path('api/licence/pointage/', LicencePointageView.as_view(), name='licence_pointage'),
     path('api/licence/statut/', LicenceStatutView.as_view(), name='licence_statut'),
     path('api/licence/derniere-version/', LicenceDerniereVersionView.as_view(), name='licence_derniere_version'),

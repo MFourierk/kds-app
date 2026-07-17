@@ -224,6 +224,7 @@ class OrderSerializer(TenantScopedSerializer):
     table_numero = serializers.SerializerMethodField()
     serveur_nom = serializers.SerializerMethodField()
     caissier_nom = serializers.SerializerMethodField()
+    annule_par_nom = serializers.SerializerMethodField()
 
     class Meta:
         model = models.Order
@@ -244,6 +245,10 @@ class OrderSerializer(TenantScopedSerializer):
             "montant_recu",
             "numero_ticket",
             "heure_paiement",
+            "motif_annulation",
+            "heure_annulation",
+            "annule_par",
+            "annule_par_nom",
             "reference_externe",
             "items",
             "total",
@@ -265,6 +270,9 @@ class OrderSerializer(TenantScopedSerializer):
             "caissier",
             "numero_ticket",
             "heure_paiement",
+            "motif_annulation",
+            "heure_annulation",
+            "annule_par",
             "created_at",
             "updated_at",
         ]
@@ -295,6 +303,11 @@ class OrderSerializer(TenantScopedSerializer):
         if not obj.caissier:
             return None
         return obj.caissier.get_full_name() or obj.caissier.username
+
+    def get_annule_par_nom(self, obj):
+        if not obj.annule_par:
+            return None
+        return obj.annule_par.get_full_name() or obj.annule_par.username
 
 
 class EncaisserSerializer(serializers.Serializer):

@@ -225,3 +225,22 @@ export async function fetchVentesParJour(periode = {}) {
   }
   return response.json()
 }
+
+/**
+ * Commandes annulées sur une période (`CommandesAnnuleesView`, réservé
+ * manager/admin, §5.1 "procédure d'annulation"). Même convention
+ * `{ depuis, jusqu_a }` que `fetchVentesParJour`/`fetchStats`.
+ */
+export async function fetchCommandesAnnulees(periode = {}) {
+  const params = new URLSearchParams()
+  if (periode.depuis) params.set('depuis', periode.depuis)
+  if (periode.jusqu_a) params.set('jusqu_a', periode.jusqu_a)
+  const suffixe = params.toString() ? `?${params.toString()}` : ''
+  const response = await apiFetch(`/api/stats/commandes-annulees/${suffixe}`)
+  if (!response.ok) {
+    const erreur = new Error('Impossible de charger les commandes annulées.')
+    erreur.status = response.status
+    throw erreur
+  }
+  return response.json()
+}

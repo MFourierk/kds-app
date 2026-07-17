@@ -102,7 +102,7 @@ def calculer_total_commande(order):
     return sum((ligne.plat.prix * ligne.quantite for ligne in lignes), start=0)
 
 
-def cancel_order(order, motif=""):
+def cancel_order(order, motif="", utilisateur=None):
     """
     Annule une commande et répercute la cascade sur ce qui est encore en
     cours (§5.1/§5.4) : les tickets déjà `servi` ne sont jamais touchés (le
@@ -115,8 +115,10 @@ def cancel_order(order, motif=""):
 
     Idempotent : ré-annuler une commande déjà annulée ne fait rien.
 
-    Partagé entre `OrderViewSet.cancel` (staff, JWT) et
-    `PosOrderCancelView` (logiciel de caisse tiers, clé API).
+    Partagé entre `OrderViewSet.cancel` (staff, JWT — motif obligatoire,
+    `utilisateur=request.user`, cf. §5.1 "procédure d'annulation") et
+    `PosOrderCancelView` (logiciel de caisse tiers, clé API — pas
+    d'utilisateur humain à créditer, `utilisateur` reste `None`).
     """
 
     if order.statut == models.Order.Statut.ANNULEE:
@@ -127,6 +129,20 @@ def cancel_order(order, motif=""):
     # `_sync_order_statut` (déclenché par le save de chaque ticket
     # ci-dessous) empêche toute resynchronisation intempestive du statut.
     order.statut = models.Order.Statut.ANNULEE
+    # `statut_paiement` (pas seulement `statut`, cf. `Order.StatutPaiement.
+    # ANNULEE`, définie mais jamais posée nulle part avant ce correctif) :
+    # sans ça, une commande annulée mais jamais payée restait indéfiniment
+    # dans la liste "Commandes de table" de la caisse (filtrée sur
+    # `statut_paiement=en_attente`), comme n'importe quelle commande en
+    # attente normale — un caissier aurait pu tenter de l'encaisser. Ne
+    # touche jamais une commande déjà `PAYEE` : ce chemin gère l'annulation
+    # d'une commande encore en cours, pas un remboursement après paiement
+    # (hors périmètre ici).
+    if order.statut_paiement == models.Order.StatutPaiement.EN_ATTENTE:
+        order.statut_paiement = models.Order.StatutPaiement.ANNULEE
+    order.motif_annulation = motif or "Commande annulée"
+    order.annule_par = utilisateur
+    order.heure_annulation = timezone.now()
     order.save()
 
     tickets_actifs = list(

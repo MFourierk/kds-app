@@ -35,6 +35,8 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
   const [encaissementOuvert, setEncaissementOuvert] = useState(null)
   const [modePaiement, setModePaiement] = useState('especes')
   const [montantRecu, setMontantRecu] = useState('')
+  const [annulationOuverte, setAnnulationOuverte] = useState(null) // id de commande ou null
+  const [motifAnnulation, setMotifAnnulation] = useState('')
   const [enCours, setEnCours] = useState(false)
   const [tenant, setTenant] = useState(null)
   const [onglet, setOnglet] = useState('tables') // 'tables' | 'comptoir' — seul le manager/admin voit la bascule
@@ -86,6 +88,38 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
     setEncaissementOuvert(commande.id)
     setModePaiement('especes')
     setMontantRecu(String(commande.total))
+  }
+
+  function ouvrirAnnulation(commande) {
+    setAnnulationOuverte(commande.id)
+    setMotifAnnulation('')
+  }
+
+  // "Procédure d'annulation" (§5.1, demandé après coup — le backend avait
+  // déjà `OrderViewSet.cancel` mais aucun écran ne l'appelait jamais,
+  // aucune manière de l'atteindre). Motif obligatoire côté écran (bouton
+  // désactivé tant qu'il est vide) ET côté backend (défense en profondeur
+  // — cf. le contrôle dans `OrderViewSet.cancel`), pas seulement une
+  // contrainte d'interface contournable.
+  async function confirmerAnnulation(commande) {
+    if (!motifAnnulation.trim()) return
+    setEnCours(true)
+    try {
+      const res = await apiFetch(`/api/orders/${commande.id}/cancel/`, {
+        method: 'POST',
+        body: JSON.stringify({ motif: motifAnnulation.trim() }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        afficherMessage(data.detail ?? 'Erreur.', true)
+        return
+      }
+      setAnnulationOuverte(null)
+      afficherMessage('Commande annulée.')
+      recharger()
+    } finally {
+      setEnCours(false)
+    }
   }
 
   async function confirmerEncaissement(commande) {
@@ -219,6 +253,34 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
                       onAnnuler={() => setEncaissementOuvert(null)}
                       enCours={enCours}
                     />
+                  ) : annulationOuverte === commande.id ? (
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-slate-400">
+                        Motif de l'annulation (obligatoire)
+                      </label>
+                      <textarea
+                        value={motifAnnulation}
+                        onChange={(e) => setMotifAnnulation(e.target.value)}
+                        placeholder="Ex : le client a renoncé, erreur de commande..."
+                        rows={2}
+                        className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-red-400 focus:outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setAnnulationOuverte(null)}
+                          className="flex-1 rounded-lg bg-slate-700 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-600"
+                        >
+                          Retour
+                        </button>
+                        <button
+                          onClick={() => confirmerAnnulation(commande)}
+                          disabled={!motifAnnulation.trim() || enCours}
+                          className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Confirmer l'annulation
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex gap-2">
                       <button
@@ -233,6 +295,15 @@ export default function CaisseScreen({ utilisateur, onChangerEcran, onDeconnexio
                           className="flex-1 rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-slate-900 hover:bg-amber-400"
                         >
                           💰 Encaisser
+                        </button>
+                      )}
+                      {peutEncaisser && (
+                        <button
+                          onClick={() => ouvrirAnnulation(commande)}
+                          title="Annuler la commande"
+                          className="shrink-0 rounded-lg bg-slate-700 px-3 py-2.5 text-sm font-semibold text-red-400 hover:bg-red-950"
+                        >
+                          ❌
                         </button>
                       )}
                     </div>

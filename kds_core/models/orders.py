@@ -60,6 +60,14 @@ class Order(TenantScopedModel):
         related_name="commandes_encaissees",
         help_text="Manager/admin qui a traité l'encaissement — renseigné automatiquement par OrderViewSet.encaisser.",
     )
+    annule_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commandes_annulees",
+        help_text="Manager/admin qui a validé l'annulation — renseigné automatiquement par OrderViewSet.cancel.",
+    )
 
     source = models.CharField(max_length=20, choices=Source.choices, default=Source.SALLE)
     statut = models.CharField(max_length=20, choices=Statut.choices, default=Statut.NOUVELLE)
@@ -90,6 +98,17 @@ class Order(TenantScopedModel):
             "n'est pas payée."
         ),
     )
+
+    # Annulation (§5.1/§5.4, demandé après coup — "quelle est la procédure ?
+    # s'il n'y en a pas, en mettre une en place, motif obligatoire") : le
+    # motif était déjà stocké par ligne (`OrderItem.motif_annulation`, cf.
+    # `services.cancel_order`), dupliqué ici au niveau commande pour que le
+    # rapport "Commandes annulées" n'ait pas à reconstruire un motif commun
+    # à partir des lignes. `heure_annulation` dédiée (plutôt que réutiliser
+    # `updated_at`) — même principe que `heure_paiement` : un horodatage
+    # métier explicite, pas un champ technique générique.
+    motif_annulation = models.CharField(max_length=255, blank=True)
+    heure_annulation = models.DateTimeField(null=True, blank=True)
 
     reference_externe = models.CharField(
         max_length=100, blank=True, help_text="Identifiant côté POS ou plateforme tierce (Yango, Glovo...)"

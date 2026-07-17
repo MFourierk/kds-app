@@ -312,7 +312,15 @@ class VentesParJourView(BaseStatsView):
                 "quantite": ligne.quantite,
                 "montant": ligne.plat.prix * ligne.quantite,
                 "table_numero": ligne.ticket.order.table.numero if ligne.ticket.order.table else None,
-                "utilisateur_nom": _nom_utilisateur(ligne.ticket.order.caissier) or _nom_utilisateur(ligne.ticket.order.serveur),
+                # `serveur` avant `caissier` (trouvé en usage réel : une
+                # commande de table est presque toujours encaissée par un
+                # manager/caissier différent de la serveuse qui l'a prise —
+                # avec la priorité inverse, le nom de la serveuse
+                # n'apparaissait donc quasiment jamais). `caissier` reste le
+                # repli pour une vente comptoir (§TPE), qui n'a pas de
+                # `serveur` du tout.
+                "utilisateur": ligne.ticket.order.serveur_id or ligne.ticket.order.caissier_id,
+                "utilisateur_nom": _nom_utilisateur(ligne.ticket.order.serveur) or _nom_utilisateur(ligne.ticket.order.caissier),
                 "heure_paiement": ligne.ticket.order.heure_paiement,
             }
             for ligne in sorted(lignes, key=lambda l: l.ticket.order.heure_paiement, reverse=True)
@@ -345,5 +353,77 @@ class VentesParJourView(BaseStatsView):
                     }
                     for row in par_categorie
                 ],
+            }
+        )
+
+
+class CommandesAnnuleesView(BaseStatsView):
+    """
+    `GET /api/stats/commandes-annulees/?depuis=&jusqu_a=` — commandes
+    annulées sur une période (§5.1/§5.4, demandé après coup : "quelle est
+    la procédure en place ? mettre en place le motif obligatoire et
+    répertorier ça sur le Tableau de bord"). Basé sur `heure_annulation`
+    (cf. `Order.heure_annulation`, `services.cancel_order`), pas
+    `updated_at` — un horodatage métier dédié plutôt qu'un champ
+    technique générique qui pourrait en théorie bouger pour d'autres
+    raisons.
+
+    `montant_perdu` : somme des lignes réellement annulées de cette
+    commande (`OrderItem.statut_ligne=ANNULE`) — pas le total qu'aurait
+    fait la commande entière, puisque `cancel_order` épargne les tickets
+    déjà servis (un plat déjà en salle n'est pas "perdu").
+    """
+
+    permission_classes = [IsAuthenticated, IsTenantMember, IsManagerOrAdmin, LicenceRapportsAutorises]
+
+    def get(self, request):
+        depuis, jusqu_a = _resoudre_periode(request)
+
+        commandes = (
+            models.Order.objects.filter(
+                tenant=request.user.tenant,
+                statut=models.Order.Statut.ANNULEE,
+                heure_annulation__gte=depuis,
+                heure_annulation__lte=jusqu_a,
+            )
+            .select_related("table", "serveur", "annule_par")
+            .order_by("-heure_annulation")
+        )
+
+        def _nom(utilisateur):
+            return (utilisateur.get_full_name() or utilisateur.username) if utilisateur else None
+
+        data = []
+        montant_total_perdu = 0
+        for commande in commandes:
+            montant = (
+                models.OrderItem.objects.filter(
+                    ticket__order=commande, statut_ligne=models.OrderItem.StatutLigne.ANNULE
+                ).aggregate(total=Sum(F("quantite") * F("plat__prix")))["total"]
+                or 0
+            )
+            montant_total_perdu += montant
+            secteur = "salle" if commande.table else "comptoir"
+            data.append(
+                {
+                    "id": commande.id,
+                    "table_numero": commande.table.numero if commande.table else None,
+                    "secteur": secteur,
+                    "secteur_libelle": LIBELLE_SECTEUR[secteur],
+                    "montant_perdu": montant,
+                    "motif": commande.motif_annulation,
+                    "serveur_nom": _nom(commande.serveur),
+                    "annule_par_nom": _nom(commande.annule_par),
+                    "heure_annulation": commande.heure_annulation,
+                }
+            )
+
+        return Response(
+            {
+                "depuis": depuis.isoformat(),
+                "jusqu_a": jusqu_a.isoformat(),
+                "nb_commandes_annulees": len(data),
+                "montant_total_perdu": montant_total_perdu,
+                "commandes": data,
             }
         )
