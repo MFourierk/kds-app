@@ -176,11 +176,26 @@ else:
 # --- Channels (WebSocket temps réel) ---
 ASGI_APPLICATION = 'config.asgi.application'
 
+# Trouvé en auditant un blocage "Envoi..." commande QR côté client réel
+# (persistant malgré les délais côté frontend, cf. `clientApi.js`) : sans
+# `socket_timeout`/`socket_connect_timeout`, une connexion Redis dégradée
+# côté channel layer peut bloquer `group_send` (diffusion temps réel d'un
+# ticket, appelée SYNCHRONEMENT pendant la création de commande, cf.
+# `signals.py::_broadcast`) indéfiniment — le délai côté navigateur finit
+# par se déclencher, mais la commande reste en réalité bloquée côté
+# serveur bien plus longtemps que nécessaire. Le format `hosts` doit être
+# un dict (pas un tuple `(host, port)`) pour pouvoir passer ces kwargs —
+# `channels_redis.utils.decode_hosts` les transmet tels quels au client
+# Redis sous-jacent.
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            'hosts': [(config('REDIS_HOST', default='localhost'), 6379)],
+            'hosts': [{
+                'address': f"redis://{config('REDIS_HOST', default='localhost')}:6379",
+                'socket_timeout': 5,
+                'socket_connect_timeout': 5,
+            }],
         },
     },
 }

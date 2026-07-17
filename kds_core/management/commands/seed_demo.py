@@ -7,6 +7,8 @@ DEMO_USERNAME = "demo"
 DEMO_PASSWORD = "demo1234"
 DEMO_CUISINIER_USERNAME = "cuisine1"
 DEMO_CUISINIER_PIN = "1234"
+DEMO_BARMAN_USERNAME = "barman1"
+DEMO_BARMAN_PIN = "1234"
 DEMO_SERVEUR_USERNAME = "serveur1"
 DEMO_SERVEUR_PIN = "1234"
 DEMO_CAISSIER_USERNAME = "caissiere1"
@@ -197,6 +199,24 @@ class Command(BaseCommand):
             cuisinier.set_unusable_password()  # pas de mot de passe, connexion PIN uniquement
             cuisinier.set_pin(DEMO_CUISINIER_PIN)
             cuisinier.save()
+
+        barman, created = models.User.objects.get_or_create(
+            username=DEMO_BARMAN_USERNAME,
+            defaults={
+                "tenant": tenant,
+                "role": models.User.Role.BARMAN,
+                "station_assignee": station_boissons,
+                "first_name": "Barman",
+                "last_name": "Démo",
+            },
+        )
+        if created or not barman.pin_code:
+            barman.tenant = tenant
+            barman.role = models.User.Role.BARMAN
+            barman.station_assignee = station_boissons
+            barman.set_unusable_password()  # pas de mot de passe, connexion PIN uniquement
+            barman.set_pin(DEMO_BARMAN_PIN)
+            barman.save()
 
         serveur, created = models.User.objects.get_or_create(
             username=DEMO_SERVEUR_USERNAME,

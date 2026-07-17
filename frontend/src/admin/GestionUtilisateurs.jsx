@@ -7,16 +7,20 @@ const ROLES = [
   { value: 'admin', label: 'Administrateur' },
   { value: 'manager', label: 'Manager' },
   { value: 'cuisinier', label: 'Cuisinier' },
+  { value: 'barman', label: 'Barman' },
   { value: 'serveur', label: 'Serveur' },
   { value: 'caissier', label: 'Caissière' },
 ]
 
-const ROLES_AVEC_PIN = ['cuisinier', 'serveur', 'caissier']
+const ROLES_AVEC_PIN = ['cuisinier', 'barman', 'serveur', 'caissier']
 // Caissier·ère n'a pas de poste de préparation (§TPE, écran verrouillé par
 // rôle, pas par `station_assignee`, cf. `App.jsx`) — connexion PIN comme
 // cuisinier/serveur, mais sans le champ "Poste assigné" qui n'aurait aucun
-// sens pour elle.
-const ROLES_AVEC_POSTE = ['cuisinier', 'serveur']
+// sens pour elle. Barman = même mécanique que cuisinier (poste assigné à
+// la station "Bar", même écran `KitchenScreen.jsx`) — seul le libellé
+// change, pour que les rapports (Productivité employés, Mouvements)
+// distinguent qui travaille en cuisine de qui travaille au bar.
+const ROLES_AVEC_POSTE = ['cuisinier', 'barman', 'serveur']
 
 const FORM_VIDE = {
   username: '',

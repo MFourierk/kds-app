@@ -1,4 +1,5 @@
 import json
+import logging
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -9,6 +10,30 @@ from rest_framework.renderers import JSONRenderer
 
 from .middleware import get_current_user
 from .models import Order, OrderItem, OrderTicket, TicketStatusLog
+
+logger = logging.getLogger(__name__)
+
+
+def _group_send_best_effort(channel_layer, group_name, message):
+    """
+    Même principe "best-effort" que `presence.py` (même raisonnement
+    exact, cf. sa docstring) : la diffusion temps réel est un confort
+    UX, pas une garantie fonctionnelle — une commande/un ticket est déjà
+    committé en base au moment où ceci s'exécute (appelé depuis un
+    `post_save`, ou après la création réussie d'une commande QR). Un
+    Redis dégradé (cf. `CHANNEL_LAYERS` — désormais borné à 5s, mais
+    reste faillible) ne doit jamais faire échouer ni même ralentir plus
+    que nécessaire une requête HTTP dont le vrai travail est déjà fait —
+    trouvé en auditant un blocage "Envoi..." persistant côté commande QR
+    qui survivait aux délais réseau frontend : `group_send` est appelé
+    SYNCHRONEMENT pendant la création de commande (plusieurs fois par
+    commande, un par ticket créé/re-diffusé), donc une lenteur Redis s'y
+    répercute directement sur le temps de réponse perçu par le client.
+    """
+    try:
+        async_to_sync(channel_layer.group_send)(group_name, message)
+    except Exception:
+        logger.warning("Échec de la diffusion temps réel (groupe=%s)", group_name, exc_info=True)
 
 # Correspondance statut ticket -> statut ligne (§5.6 "voir sa commande
 # avancer plat par plat"), UNIQUEMENT dans le sens ticket → lignes qui
@@ -245,9 +270,7 @@ def broadcast_appel_serveur(table, event):
         for station_id in Station.objects.filter(tenant_id=table.tenant_id).values_list("id", flat=True)
     ]
     for group_name in groupes:
-        async_to_sync(channel_layer.group_send)(
-            group_name, {"type": "table.event", "event": event, "table": payload}
-        )
+        _group_send_best_effort(channel_layer, group_name, {"type": "table.event", "event": event, "table": payload})
 
 
 def _broadcast(instance, created):
@@ -278,9 +301,7 @@ def _broadcast(instance, created):
         f"kds_{instance.tenant_id}_{instance.station_id}",
         f"kds_{instance.tenant_id}_master",
     ):
-        async_to_sync(channel_layer.group_send)(
-            group_name, {"type": "ticket.event", "event": event, "ticket": payload}
-        )
+        _group_send_best_effort(channel_layer, group_name, {"type": "ticket.event", "event": event, "ticket": payload})
 
 
 def _sync_order_statut(order):

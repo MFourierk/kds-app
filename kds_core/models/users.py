@@ -16,6 +16,7 @@ class User(AbstractUser):
         ADMIN = "admin", "Administrateur"
         MANAGER = "manager", "Manager"
         CUISINIER = "cuisinier", "Cuisinier"
+        BARMAN = "barman", "Barman"
         SERVEUR = "serveur", "Serveur"
         # Vente comptoir uniquement (écran TPE) — pas de poste cuisine, pas
         # d'accès au tableau de bord, cf. `VenteComptoirScreen.jsx`.

@@ -37,7 +37,7 @@ import time
 
 import redis.asyncio as redis
 from asgiref.sync import async_to_sync
-from django.conf import settings
+from decouple import config
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +48,15 @@ _client = None
 
 
 def _get_client():
+    # Lu directement depuis l'env plutôt que reconstruit à partir de
+    # `settings.CHANNEL_LAYERS["hosts"]` (fragile — ce format a déjà
+    # changé une fois, cf. `CHANNEL_LAYERS`, et a cassé ce parsing en
+    # silence la première fois faute de test qui l'aurait détecté).
     global _client
     if _client is None:
-        host, port = settings.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"][0]
         _client = redis.Redis(
-            host=host,
-            port=port,
+            host=config('REDIS_HOST', default='localhost'),
+            port=6379,
             socket_timeout=REDIS_TIMEOUT_SECONDS,
             socket_connect_timeout=REDIS_TIMEOUT_SECONDS,
         )

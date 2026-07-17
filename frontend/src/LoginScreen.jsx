@@ -6,6 +6,7 @@ const LIBELLE_ROLE = {
   manager: 'Manager',
   admin: 'Administrateur',
   cuisinier: 'Cuisinier',
+  barman: 'Barman',
   serveur: 'Serveur',
   caissier: 'Caissière',
 }

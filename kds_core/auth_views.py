@@ -46,6 +46,7 @@ class KioskStaffListView(generics.ListAPIView):
             is_active=True,
             role__in=[
                 models.User.Role.CUISINIER,
+                models.User.Role.BARMAN,
                 models.User.Role.SERVEUR,
                 models.User.Role.CAISSIER,
             ],
