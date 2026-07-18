@@ -1,3 +1,4 @@
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -38,7 +39,18 @@ class QrMenuView(APIView):
         table = get_object_or_404(models.RestaurantTable, qr_code_token=qr_code_token)
         tenant = table.tenant
 
-        categories = models.MenuCategory.objects.filter(tenant=tenant).order_by("ordre_affichage")
+        # `prefetch_related` (trouvé en auditant le module QR, régression
+        # de perf introduite par les modificateurs, §5.2) : sans ça,
+        # chaque plat déclenche une requête pour ses modificateurs, et
+        # chaque modificateur une autre pour sa catégorie
+        # (`QrModifierSerializer.get_categorie_*`) — un menu de quelques
+        # dizaines de plats avec modificateurs peut facilement dépasser
+        # la centaine de requêtes pour un seul chargement de menu.
+        categories = (
+            models.MenuCategory.objects.filter(tenant=tenant)
+            .prefetch_related("plats__modifiers__categorie")
+            .order_by("ordre_affichage")
+        )
         context = {
             "request": request,
             "exclure_allergenes": request.query_params.getlist("exclure_allergene"),
@@ -114,13 +126,32 @@ class QrOrderCreateView(APIView):
             except ValueError as exc:
                 return Response({"items": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        order = models.Order.objects.create(
-            tenant=table.tenant,
-            table=table,
-            source=models.Order.Source.QR_CODE,
-            idempotency_key=idempotency_key,
-        )
-        services.route_items_to_tickets(order, items)
+        # Atomique (trouvé en auditant le module QR) : sans ça, une
+        # commande créée puis un échec en cours de routage (exception
+        # inattendue) laissait une commande fantôme, vide, en base — plus
+        # jamais rattrapable par le client (son panier a déjà été vidé
+        # côté écran à ce moment-là).
+        try:
+            with transaction.atomic():
+                order = models.Order.objects.create(
+                    tenant=table.tenant,
+                    table=table,
+                    source=models.Order.Source.QR_CODE,
+                    idempotency_key=idempotency_key,
+                )
+                services.route_items_to_tickets(order, items)
+        except IntegrityError:
+            # Contrainte unique (migration 0019) déclenchée : une autre
+            # requête portant la MÊME `idempotency_key` a gagné la course
+            # (cf. contrôle "déjà existante" ci-dessus, qui ne suffit pas
+            # seul contre deux requêtes concurrentes). Comportement
+            # identique à ce contrôle : renvoyer la commande gagnante.
+            existante = models.Order.objects.get(
+                tenant=table.tenant, table=table, idempotency_key=idempotency_key
+            )
+            data = serializers.QrOrderStatusSerializer(existante).data
+            data.update(_presence_payload(table.tenant_id))
+            return Response(data, status=status.HTTP_200_OK)
 
         if table.statut == models.RestaurantTable.Statut.LIBRE:
             table.statut = models.RestaurantTable.Statut.OCCUPEE

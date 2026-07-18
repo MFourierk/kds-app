@@ -663,9 +663,18 @@ class QrMenuCategorySerializer(serializers.ModelSerializer):
     def get_plats(self, obj):
         exclure_allergenes = self.context.get("exclure_allergenes") or []
         regime = self.context.get("regime")
-        plats = obj.plats.filter(
-            is_active=True, statut=models.MenuItem.Statut.DISPONIBLE
-        ).order_by("nom")
+        # `.all()`, filtré/trié ici en Python plutôt qu'un `.filter()` SQL
+        # (trouvé en auditant le module QR — régression de perf des
+        # modificateurs) : `QrMenuView` précharge `plats__modifiers__categorie`
+        # sur le queryset de catégories ; un `.filter()` ici court-circuiterait
+        # ce cache de préchargement Django (il ne sert que des `.all()` sans
+        # filtre additionnel) et redéclencherait une requête par catégorie —
+        # pire, ça repartait aussi d'une base non préchargée pour les
+        # modificateurs/catégories de chaque plat, ramenant tout le N+1.
+        plats = sorted(
+            (p for p in obj.plats.all() if p.is_active and p.statut == models.MenuItem.Statut.DISPONIBLE),
+            key=lambda p: p.nom,
+        )
         resultat = []
         for plat in plats:
             if exclure_allergenes and any(a in plat.allergenes for a in exclure_allergenes):

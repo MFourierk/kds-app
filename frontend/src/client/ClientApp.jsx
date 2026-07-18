@@ -80,6 +80,16 @@ export default function ClientApp({ qrToken }) {
   const [notification, setNotification] = useState('')
   const [commandesEnFile, setCommandesEnFile] = useState([])
   const suiviPrecedentRef = useRef(null)
+  // Verrou synchrone (trouvé en auditant le module QR) : `setEnvoiEnCours`
+  // programme un re-rendu, il ne désactive pas le bouton dans l'instant —
+  // un double-tap rapide (courant sur un écran tactile) peut donc invoquer
+  // `validerCommande` deux fois avant que React n'ait eu le temps de
+  // rendre le bouton désactivé, chacune générant SA PROPRE
+  // `idempotencyKey` (donc invisible pour la déduplication serveur, qui ne
+  // protège que contre le REJEU d'une même tentative). Une ref, contrairement
+  // à un state, est lue/écrite immédiatement, sans attendre un rendu.
+  const envoiEnCoursRef = useRef(false)
+  const synchronisationEnCoursRef = useRef(false)
 
   useEffect(() => {
     const gestion = () => setMajDisponible(true)
@@ -139,25 +149,38 @@ export default function ClientApp({ qrToken }) {
   }
 
   async function synchroniserFile() {
-    const file = await listerCommandesEnFile(qrToken)
-    for (const commande of file) {
-      try {
-        await creerCommande(qrToken, commande.items, commande.idempotencyKey)
-        await retirerCommandeDeLaFile(commande.idempotencyKey)
-        setModeHorsLigne(false)
-      } catch (e) {
-        if (e instanceof ErreurReseau) {
-          // Toujours hors ligne : on s'arrête là, on retentera au
-          // prochain événement "online" plutôt que de boucler en vain
-          // sur les commandes suivantes de la file.
-          await rafraichirFile()
-          return
+    // Appelée au montage ET à chaque événement `online` (une connexion
+    // qui flotte peut en émettre plusieurs coup sur coup) — sans ce
+    // verrou, deux appels concurrents liraient chacun la même commande en
+    // file (aucun n'a encore eu le temps de la retirer) et l'enverraient
+    // tous les deux en parallèle avec la même `idempotencyKey`. Le
+    // serveur s'en protège désormais aussi (contrainte DB), mais autant
+    // ne pas déclencher la course pour rien côté client.
+    if (synchronisationEnCoursRef.current) return
+    synchronisationEnCoursRef.current = true
+    try {
+      const file = await listerCommandesEnFile(qrToken)
+      for (const commande of file) {
+        try {
+          await creerCommande(qrToken, commande.items, commande.idempotencyKey)
+          await retirerCommandeDeLaFile(commande.idempotencyKey)
+          setModeHorsLigne(false)
+        } catch (e) {
+          if (e instanceof ErreurReseau) {
+            // Toujours hors ligne : on s'arrête là, on retentera au
+            // prochain événement "online" plutôt que de boucler en vain
+            // sur les commandes suivantes de la file.
+            await rafraichirFile()
+            return
+          }
+          // Erreur HTTP réelle (ex: plat retiré du menu entretemps) : on
+          // retire quand même de la file pour ne pas y rester bloqué pour
+          // toujours sur une commande qui ne passera jamais.
+          await retirerCommandeDeLaFile(commande.idempotencyKey)
         }
-        // Erreur HTTP réelle (ex: plat retiré du menu entretemps) : on
-        // retire quand même de la file pour ne pas y rester bloqué pour
-        // toujours sur une commande qui ne passera jamais.
-        await retirerCommandeDeLaFile(commande.idempotencyKey)
       }
+    } finally {
+      synchronisationEnCoursRef.current = false
     }
     await rafraichirFile()
   }
@@ -235,6 +258,11 @@ export default function ClientApp({ qrToken }) {
   }
 
   async function validerCommande() {
+    // Verrou synchrone (cf. déclaration de `envoiEnCoursRef` plus haut) —
+    // un double-tap rapide sur "Commander" doit être ignoré, pas
+    // silencieusement transformé en deux commandes.
+    if (envoiEnCoursRef.current) return
+    envoiEnCoursRef.current = true
     setEnvoiEnCours(true)
     setErreurCommande('')
     // Généré ici (pas dans clientApi.js) : c'est CETTE tentative précise
@@ -274,6 +302,7 @@ export default function ClientApp({ qrToken }) {
         setErreurCommande(e.message)
       }
     } finally {
+      envoiEnCoursRef.current = false
       setEnvoiEnCours(false)
     }
   }

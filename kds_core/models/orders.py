@@ -128,7 +128,25 @@ class Order(TenantScopedModel):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["tenant", "statut"]),
-            models.Index(fields=["tenant", "table", "idempotency_key"]),
+        ]
+        constraints = [
+            # Trouvé en auditant le module QR (§5.5) : le contrôle
+            # applicatif dans `QrOrderCreateView` ("si une commande avec
+            # cette clé existe déjà, la renvoyer") vérifie puis crée en
+            # deux temps — deux requêtes concurrentes portant la MÊME clé
+            # (ex: la file hors-ligne qui rejoue une commande pendant
+            # qu'une tentative précédente, ralentie, est encore en train
+            # d'être traitée côté serveur) peuvent toutes les deux passer
+            # le contrôle avant qu'aucune n'ait committé, créant deux
+            # commandes identiques. Contrainte PARTIELLE (pas sur les
+            # lignes à `idempotency_key` vide) : le staff/POS ne fournit
+            # jamais cette clé, de nombreuses commandes par table avec une
+            # clé vide sont normales et ne doivent pas se bloquer entre elles.
+            models.UniqueConstraint(
+                fields=["tenant", "table", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="unique_idempotency_key_par_table",
+            ),
         ]
 
     def __str__(self):

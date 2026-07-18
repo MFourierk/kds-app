@@ -492,13 +492,17 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
         # pas de table à libérer/occuper, source distincte pour les rapports.
         table = serializer.validated_data.get("table")
 
-        order = models.Order.objects.create(
-            tenant=request.user.tenant,
-            table=table,
-            serveur=request.user,
-            source=models.Order.Source.SALLE if table else models.Order.Source.COMPTOIR,
-        )
-        services.route_items_to_tickets(order, serializer.validated_data["items"])
+        # Atomique (cf. audit du module QR, même fonction partagée) : un
+        # échec de routage à mi-chemin ne doit jamais laisser une
+        # commande fantôme, vide, en base.
+        with transaction.atomic():
+            order = models.Order.objects.create(
+                tenant=request.user.tenant,
+                table=table,
+                serveur=request.user,
+                source=models.Order.Source.SALLE if table else models.Order.Source.COMPTOIR,
+            )
+            services.route_items_to_tickets(order, serializer.validated_data["items"])
 
         if table and table.statut == models.RestaurantTable.Statut.LIBRE:
             table.statut = models.RestaurantTable.Statut.OCCUPEE
@@ -524,7 +528,8 @@ class OrderViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
 
-        tickets = services.route_items_to_tickets(order, serializer.validated_data["items"])
+        with transaction.atomic():
+            tickets = services.route_items_to_tickets(order, serializer.validated_data["items"])
 
         result = serializers.OrderTicketSerializer(
             tickets, many=True, context=self.get_serializer_context()

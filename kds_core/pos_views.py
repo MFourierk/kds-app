@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -49,13 +50,15 @@ class PosOrderCreateView(APIView):
                 tenant=tenant, numero=data["table_numero"]
             ).first()
 
-        order = models.Order.objects.create(
-            tenant=tenant,
-            table=table,
-            source=models.Order.Source.SALLE,
-            reference_externe=data.get("reference_externe", ""),
-        )
-        services.route_items_to_tickets(order, data["items"])
+        # Atomique (cf. audit du module QR, même fonction partagée).
+        with transaction.atomic():
+            order = models.Order.objects.create(
+                tenant=tenant,
+                table=table,
+                source=models.Order.Source.SALLE,
+                reference_externe=data.get("reference_externe", ""),
+            )
+            services.route_items_to_tickets(order, data["items"])
 
         return Response(
             serializers.OrderSerializer(order, context={"request": request}).data,
