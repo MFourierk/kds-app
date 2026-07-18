@@ -8,6 +8,25 @@ import TrackingView from './TrackingView'
 
 const INTERVALLE_SUIVI_MS = 5000
 
+// Trouvé en auditant le module QR directement sur l'installation cliente
+// réelle (servie en HTTP simple sur son IP locale, `http://192.168.1.6`,
+// jamais en HTTPS) : `crypto.randomUUID()` n'existe QUE dans un contexte
+// sécurisé (HTTPS, ou `localhost`) — absent silencieusement partout
+// ailleurs, y compris un simple LAN. Chaque test fait ce jour l'a été
+// via `http://localhost:5173`, un cas justement exempté par le
+// navigateur, ce qui a caché le problème jusqu'à un test en conditions
+// réelles. `crypto.getRandomValues()`, lui, reste disponible hors
+// contexte sécurisé — utilisé ici pour fabriquer un UUID v4 sans
+// dépendre de `randomUUID()`.
+function genererIdempotencyKey() {
+  if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID()
+  const octets = crypto.getRandomValues(new Uint8Array(16))
+  octets[6] = (octets[6] & 0x0f) | 0x40
+  octets[8] = (octets[8] & 0x3f) | 0x80
+  const hex = [...octets].map((o) => o.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 /**
  * Compare deux réponses successives de `fetchSuivi` (§5.6) pour détecter
  * les transitions à notifier au client — un plat qui passe "prêt", ou un
@@ -265,19 +284,29 @@ export default function ClientApp({ qrToken }) {
     envoiEnCoursRef.current = true
     setEnvoiEnCours(true)
     setErreurCommande('')
-    // Généré ici (pas dans clientApi.js) : c'est CETTE tentative précise
-    // qui doit garder la même clé si elle est rejouée depuis la file
-    // hors-ligne, sinon la déduplication côté serveur ne sert à rien.
-    const idempotencyKey = crypto.randomUUID()
-    const items = panier.map(({ plat, quantite, service_immediat, servir_en_dernier, commentaire_libre, modificateurs }) => ({
-      plat,
-      quantite,
-      service_immediat,
-      servir_en_dernier,
-      commentaire_libre,
-      modificateurs,
-    }))
+    // Tout, y compris la génération de la clé, DANS le `try` (trouvé en
+    // auditant ce module) : une exception synchrone levée AVANT le `try`
+    // saute le `finally` plus bas — le bouton restait bloqué sur
+    // "Envoi..." pour toujours, sans le moindre appel réseau, exactement
+    // le bug qui a motivé cet audit (cf. `genererIdempotencyKey`).
+    // Déclarées ici (pas `const` dans le `try`) : le bloc `catch` plus bas
+    // en a besoin aussi (mise en file hors-ligne) — assignées à
+    // l'intérieur du `try` tout de même, pour rester protégées si
+    // `genererIdempotencyKey()` devait un jour à nouveau échouer.
+    let idempotencyKey, items
     try {
+      // Généré ici (pas dans clientApi.js) : c'est CETTE tentative précise
+      // qui doit garder la même clé si elle est rejouée depuis la file
+      // hors-ligne, sinon la déduplication côté serveur ne sert à rien.
+      idempotencyKey = genererIdempotencyKey()
+      items = panier.map(({ plat, quantite, service_immediat, servir_en_dernier, commentaire_libre, modificateurs }) => ({
+        plat,
+        quantite,
+        service_immediat,
+        servir_en_dernier,
+        commentaire_libre,
+        modificateurs,
+      }))
       await creerCommande(qrToken, items, idempotencyKey)
       setModeHorsLigne(false)
       setPanier([])
