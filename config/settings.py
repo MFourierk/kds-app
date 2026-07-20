@@ -111,7 +111,13 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # `admin/auth/user/add_form.html` (§audit admin) : surcharge le
+        # texte d'aide par défaut de Django sur le formulaire d'ajout
+        # d'utilisateur. Les gabarits d'un `DIRS` explicite passent avant
+        # ceux des apps (`APP_DIRS`), donc avant celui de
+        # `django.contrib.admin` lui-même, quel que soit l'ordre dans
+        # `INSTALLED_APPS`.
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.forms import UserCreationForm
 
 from . import models
 
@@ -49,10 +50,26 @@ class MenuCategoryAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "station")
 
 
+@admin.register(models.ModifierCategory)
+class ModifierCategoryAdmin(admin.ModelAdmin):
+    """
+    Manquait entièrement du menu admin (§audit) — la fonctionnalité
+    catégories de modificateurs existe côté modèle/API/frontend depuis son
+    ajout, mais n'avait jamais été enregistrée ici, donc invisible/
+    inaccessible depuis la console Django.
+    """
+
+    list_display = ("nom", "tenant", "obligatoire", "selection_multiple", "ordre_affichage")
+    list_filter = ("tenant", "obligatoire")
+
+
 @admin.register(models.Modifier)
 class ModifierAdmin(admin.ModelAdmin):
-    list_display = ("libelle", "tenant", "type_modifier", "niveau_alerte_critique")
-    list_filter = ("tenant", "type_modifier", "niveau_alerte_critique")
+    # `categorie` ajoutée (§audit) — absente alors que le champ existe sur
+    # le modèle depuis les catégories de modificateurs ; la console ne
+    # reflétait plus ce que gère déjà le frontend.
+    list_display = ("libelle", "tenant", "categorie", "type_modifier", "niveau_alerte_critique")
+    list_filter = ("tenant", "categorie", "type_modifier", "niveau_alerte_critique")
 
 
 @admin.register(models.MenuItem)
@@ -60,6 +77,10 @@ class MenuItemAdmin(admin.ModelAdmin):
     list_display = ("nom", "tenant", "categorie", "station", "prix", "statut", "is_active")
     list_filter = ("tenant", "categorie", "statut", "is_active")
     search_fields = ("nom",)
+    # Widget à deux colonnes avec recherche plutôt que le <select multiple>
+    # brut par défaut — plus lisible dès qu'un plat a plus de 2-3
+    # modificateurs (cf. Brochette de bœuf, 19 dans les données réelles).
+    filter_horizontal = ("modifiers",)
 
 
 @admin.register(models.RestaurantTable)
@@ -69,10 +90,38 @@ class RestaurantTableAdmin(admin.ModelAdmin):
     readonly_fields = ("qr_code_token",)
 
 
+class KdsUserCreationForm(UserCreationForm):
+    """
+    §audit — cause réelle de "je ne trouve pas le menu pour les rôles" :
+    le formulaire d'ajout de Django par défaut (`add_fieldsets` hérité,
+    jamais surchargé jusqu'ici) ne demande QUE identifiant + mot de passe,
+    avec le message "vous pourrez modifier plus d'options ensuite" — le
+    champ rôle existe bien, mais seulement sur l'écran d'édition qui
+    s'affiche APRÈS l'enregistrement, pas sur celui-ci. Ce formulaire
+    étendu fait apparaître tenant/rôle/poste dès la création, comme le
+    fait déjà l'écran "Équipe" du frontend (`GestionUtilisateurs.jsx`) en
+    une seule étape.
+    """
+
+    class Meta(UserCreationForm.Meta):
+        model = models.User
+        fields = ("username", "tenant", "role", "station_assignee")
+
+
 @admin.register(models.User)
 class UserAdmin(DjangoUserAdmin):
     list_display = ("username", "tenant", "role", "station_assignee", "is_active")
     list_filter = ("tenant", "role", "is_active")
+    add_form = KdsUserCreationForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("username", "password1", "password2", "tenant", "role", "station_assignee"),
+            },
+        ),
+    )
     fieldsets = DjangoUserAdmin.fieldsets + (
         ("KDS", {"fields": ("tenant", "role", "station_assignee", "pin_code")}),
     )
@@ -100,3 +149,21 @@ class OrderAdmin(admin.ModelAdmin):
 class TicketStatusLogAdmin(admin.ModelAdmin):
     list_display = ("ticket", "ancien_statut", "nouveau_statut", "utilisateur", "created_at")
     list_filter = ("tenant",)
+
+
+@admin.register(models.EtatLicenceLocal)
+class EtatLicenceLocalAdmin(admin.ModelAdmin):
+    """
+    Manquait du menu admin (§audit). Lecture seule à dessein : rempli
+    automatiquement par `manage.py verifier_licence` (pointage périodique),
+    jamais par une saisie manuelle — utile ici uniquement pour consulter le
+    dernier statut de licence connu sans SSH sur une installation cliente.
+    """
+
+    list_display = ("statut", "date_prochaine_echeance", "dernier_pointage_reussi", "derniere_tentative")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

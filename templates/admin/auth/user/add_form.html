@@ -1,0 +1,14 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+{# Surcharge du gabarit Django par défaut (§audit admin) : le message
+   d'origine ("saisissez d'abord identifiant + mot de passe, vous
+   pourrez modifier le reste ensuite") ne correspond plus à ce
+   formulaire — tenant/rôle/poste sont déjà demandés ici, cf.
+   `kds_core.admin.KdsUserCreationForm`. #}
+{% block form_top %}
+  {% if not is_popup %}
+    <p>{% translate 'Renseignez identifiant, mot de passe, établissement et rôle — tout en une fois.' %}</p>
+  {% else %}
+    <p>{% translate "Enter a username and password." %}</p>
+  {% endif %}
+{% endblock %}
